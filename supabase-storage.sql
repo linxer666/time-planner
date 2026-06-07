@@ -11,7 +11,8 @@ values (
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain'
+    'text/plain',
+    'application/octet-stream'
   ]
 )
 on conflict (id) do update set

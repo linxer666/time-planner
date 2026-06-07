@@ -33,6 +33,68 @@
     return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
   }
 
+  function guessMimeType(file) {
+    if (file.type) return file.type;
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const map = {
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      txt: "text/plain"
+    };
+    return map[ext] || "application/octet-stream";
+  }
+
+  function uploadErrorMessage(err) {
+    const msg = String(err?.message || err || "");
+    if (msg.includes("mime") || msg.includes("MIME")) {
+      return "文件类型不被云端接受，请上传 PDF 或 Word";
+    }
+    if (msg.includes("Bucket not found")) {
+      return "云端资料库未初始化，请在 Supabase 执行 supabase-storage.sql";
+    }
+    if (msg.includes("row-level security") || msg.includes("policy")) {
+      return "云端权限不足，请确认已登录且 Storage 策略已配置";
+    }
+    if (msg.includes("JWT") || msg.includes("session") || msg.includes("401")) {
+      return "登录已过期，请退出后重新登录再上传";
+    }
+    if (msg.includes("Payload too large") || msg.includes("maximum")) {
+      return "文件超过 50MB 上限";
+    }
+    return msg || "上传失败";
+  }
+
+  async function saveMaterialLocal(store, file, meta) {
+    await store.saveLocalFile(meta.id, file);
+    await store.add("materials", {
+      name: meta.displayName,
+      storage_path: meta.id,
+      tag: meta.safeTag,
+      file_size: file.size,
+      mime_type: meta.mimeType,
+      local_only: true
+    });
+  }
+
+  async function saveMaterialCloud(store, file, meta) {
+    const bucket = window.PM_SUPABASE?.storageBucket || "materials";
+    const path = `${store.user.id}/${meta.storagePath}`;
+    const { error } = await store.supabase.storage.from(bucket).upload(path, file, {
+      upsert: true,
+      contentType: meta.mimeType
+    });
+    if (error) throw error;
+    await store.add("materials", {
+      name: meta.displayName,
+      storage_path: path,
+      tag: meta.safeTag,
+      file_size: file.size,
+      mime_type: meta.mimeType,
+      local_only: false
+    });
+  }
+
   function renderTagFilterOptions() {
     const select = $("#materialTagFilter");
     if (!select) return;
@@ -82,32 +144,24 @@
     const id = store.uuid();
     const ext = file.name.split(".").pop() || "bin";
     const storagePath = `${id}.${ext}`;
+    const mimeType = guessMimeType(file);
+    const meta = { id, storagePath, displayName, safeTag, mimeType };
 
     if (store.cloudReady) {
-      const bucket = window.PM_SUPABASE?.storageBucket || "materials";
-      const path = `${store.user.id}/${storagePath}`;
-      const { error } = await store.supabase.storage.from(bucket).upload(path, file, { upsert: true });
-      if (error) throw error;
-      await store.add("materials", {
-        name: displayName,
-        storage_path: path,
-        tag: safeTag,
-        file_size: file.size,
-        mime_type: file.type,
-        local_only: false
-      });
-    } else {
-      await store.saveLocalFile(id, file);
-      await store.add("materials", {
-        name: displayName,
-        storage_path: id,
-        tag: safeTag,
-        file_size: file.size,
-        mime_type: file.type,
-        local_only: true
-      });
+      try {
+        await saveMaterialCloud(store, file, meta);
+        app.toast("资料已上传到云端");
+        return;
+      } catch (err) {
+        console.warn("云端上传失败，改存本机", err);
+        await saveMaterialLocal(store, file, meta);
+        app.toast(`云端失败，已暂存本机：${uploadErrorMessage(err)}`);
+        return;
+      }
     }
-    app.toast("资料上传成功");
+
+    await saveMaterialLocal(store, file, meta);
+    app.toast("资料已保存到本浏览器（登录后可同步到云端）");
   }
 
   async function getFileBlob(store, item) {
@@ -209,7 +263,8 @@
           await uploadFile(store, app, file);
           render(store, app);
         } catch (err) {
-          app.toast(err.message || "上传失败");
+          console.error(err);
+          app.toast(uploadErrorMessage(err));
         }
       });
       $("#materialSearch")?.addEventListener("input", () => render(store, app));

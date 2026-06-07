@@ -23,6 +23,12 @@
 ### 资料库
 - 上传 PDF / Word，分类标签，搜索，在线预览
 
+### 申论积累（新增）
+- 自动抓取 [人民锐评](http://opinion.people.com.cn/GB/436867/index.html) 与 [学习时评](https://news.southcn.com/node_85bedd3e4b)
+- AI 提炼论点、金句、论据、对策框架
+- **今日计划**右侧卡片展示「每日申论积累」
+- **考公备考 → 申论积累** 可搜索、按主题/来源筛选、收藏
+
 ## 快速开始
 
 ### 1. 本地运行
@@ -53,6 +59,12 @@ powershell -ExecutionPolicy Bypass -File .\deploy-github.ps1
 
 以后改完功能，再运行一次 `.\deploy-github.ps1`（或 `git push`）即可自动更新网站。
 
+**线上站登录 / 上传资料**：Supabase → **Authentication** → **URL Configuration**，在 **Redirect URLs** 里加上你的 Pages 地址，例如：
+
+`https://linxer666.github.io/time-planner/`
+
+资料上传走 Supabase Storage，需已执行 `supabase-storage.sql`。若上传报类型错误，在 SQL Editor 里重新执行该文件即可。
+
 ### 3. 配置 Supabase 数据库（推荐）
 
 #### 第一步：创建 Supabase 项目
@@ -69,8 +81,9 @@ powershell -ExecutionPolicy Bypass -File .\deploy-github.ps1
 | 1 | [`supabase-schema.sql`](supabase-schema.sql) | 建表 + 行级安全 RLS |
 | 2 | [`supabase-storage.sql`](supabase-storage.sql) | 资料库 bucket + 文件权限 |
 | 3 | [`supabase-migration.sql`](supabase-migration.sql) | 仅旧库升级时需要 |
+| 4 | [`supabase-essay-schema.sql`](supabase-essay-schema.sql) | 申论积累表（收藏等个人数据） |
 
-新建项目执行 1、2 即可。每条 SQL 点 **Run**，看到 Success 就行。
+新建项目执行 1、2、4 即可。每条 SQL 点 **Run**，看到 Success 就行。
 
 #### 第三步：开启邮箱登录
 
@@ -155,6 +168,34 @@ time_planner/
 │   └── materials.js
 └── start-server.ps1
 ```
+
+## 申论积累流水线
+
+本地生成素材（建议每天早上运行一次）：
+
+```powershell
+# 1. 复制配置
+copy .env.example .env
+# 编辑 .env，填入 AI_API_KEY
+
+# 2. 一键抓取 + AI 提炼
+.\scripts\run_essay_pipeline.ps1
+
+# AI 接口不稳定时，用规则兜底（仍能生成可用素材）
+.\scripts\run_essay_pipeline.ps1 -Fallback
+
+# 仅对已有文章重新提炼
+.\scripts\run_essay_pipeline.ps1 -ExtractOnly -Fallback
+```
+
+脚本会：
+1. 抓取人民锐评、学习时评最新文章
+2. 调用 AI 提炼申论素材（论点 / 金句 / 对策）；失败时自动规则兜底
+3. 选出今日推荐，写入 `data/essay_public.json`
+
+前端自动读取该文件。部署前运行一次流水线，再 `git push` 即可更新线上素材。
+
+可用 Windows **任务计划程序** 每天 7:00 运行 `run_essay_pipeline.ps1`。
 
 ## 数据备份
 

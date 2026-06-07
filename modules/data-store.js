@@ -5,7 +5,8 @@
   const TABLES = [
     "projects", "milestones", "tasks", "weekly_goals", "tech_todos", "work_logs",
     "exam_events", "study_records", "courses", "course_logs", "daily_plans",
-    "daily_tasks", "daily_summaries", "wrong_questions", "materials", "settings"
+    "daily_tasks", "daily_summaries", "wrong_questions", "materials",
+    "essay_user_actions", "settings"
   ];
 
   const emptyData = () => ({
@@ -23,6 +24,7 @@
     daily_tasks: [],
     daily_summaries: [],
     wrong_questions: [],
+    essay_user_actions: [],
     materials: [],
     settings: {
       morning_reminder: "09:30",
@@ -221,6 +223,7 @@
 
     async loadFromCloud() {
       if (!this.cloudReady) return;
+      const localOnlyMaterials = this.list("materials").filter((item) => item.local_only);
       const next = emptyData();
       for (const table of TABLES) {
         if (table === "settings") {
@@ -254,6 +257,13 @@
           if (copy.accuracy != null) copy.accuracy = Number(copy.accuracy);
           return copy;
         });
+      }
+      if (localOnlyMaterials.length) {
+        const cloudIds = new Set(next.materials.map((item) => item.id));
+        next.materials = [
+          ...next.materials,
+          ...localOnlyMaterials.filter((item) => !cloudIds.has(item.id))
+        ];
       }
       this.data = next;
       this.saveLocal();

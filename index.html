@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>双线计划台</title>
     <link rel="stylesheet" href="styles.css?v=20260606f" />
-    <link rel="stylesheet" href="planner.css?v=20260606k" />
+    <link rel="stylesheet" href="planner.css?v=20260607a" />
   </head>
   <body>
     <div class="app-shell" id="appShell">
@@ -79,7 +79,7 @@
         <!-- ========== 今日计划 ========== -->
         <section id="dashboardView" class="view active">
           <div class="dashboard-grid">
-            <article class="panel dash-card full-width" id="morningPlanCard">
+            <article class="panel dash-card" id="morningPlanCard">
               <div class="section-head compact">
                 <div>
                   <p class="eyebrow" id="selectedDateEyebrow">今天</p>
@@ -136,6 +136,16 @@
                 </div>
                 <div class="calendar-grid dash-calendar" id="dashCalendarGrid"></div>
               </div>
+            </article>
+
+            <article class="panel dash-card essay-daily-card" id="essayDailyCard">
+              <div class="section-head compact">
+                <div>
+                  <p class="eyebrow">考公 · 申论</p>
+                  <h2>每日申论积累</h2>
+                </div>
+              </div>
+              <p class="inline-empty">加载中…</p>
             </article>
           </div>
         </section>
@@ -300,6 +310,7 @@
             <button class="exam-tab" data-exam-tab="courses">看课进度</button>
             <button class="exam-tab" data-exam-tab="summaries">每日总结</button>
             <button class="exam-tab" data-exam-tab="calendar">考试日历</button>
+            <button class="exam-tab" data-exam-tab="essay">申论积累</button>
           </div>
 
           <div id="examStudyPanel" class="exam-panel active">
@@ -407,6 +418,38 @@
               <ul class="record-list" id="examEventsList"></ul>
             </div>
           </div>
+
+          <div id="examEssayPanel" class="exam-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">人民锐评 · 学习时评</p>
+                <h2>申论素材库</h2>
+              </div>
+              <button class="ghost-btn sm-btn" type="button" id="refreshEssayBtn">刷新</button>
+            </div>
+            <div class="essay-toolbar">
+              <label class="materials-field">
+                <span class="materials-field-label">搜索</span>
+                <input id="essaySearch" type="search" placeholder="标题、论点、金句…" />
+              </label>
+              <label class="materials-field materials-field-narrow">
+                <span class="materials-field-label">来源</span>
+                <select id="essaySourceFilter">
+                  <option value="">全部来源</option>
+                  <option value="rmrb">人民锐评</option>
+                  <option value="nfdb">学习时评</option>
+                </select>
+              </label>
+              <label class="materials-field materials-field-narrow">
+                <span class="materials-field-label">主题</span>
+                <select id="essayTagFilter">
+                  <option value="">全部主题</option>
+                </select>
+              </label>
+            </div>
+            <div class="essay-library" id="essayLibraryList"></div>
+            <p class="inline-empty hidden" id="essayLibraryEmpty">暂无素材。运行 scripts/run_essay_pipeline.ps1 抓取并提炼。</p>
+          </div>
         </section>
 
         <!-- ========== 资料库 ========== -->
@@ -465,14 +508,15 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="modules/data-store.js?v=20260606d"></script>
+    <script src="modules/data-store.js?v=20260607a"></script>
     <script src="modules/dialog.js?v=20260605b"></script>
     <script src="modules/notifications.js?v=20260605b"></script>
     <script src="modules/dashboard.js?v=20260605f"></script>
     <script src="modules/projects.js?v=20260605n"></script>
     <script src="modules/exam-taxonomy.js?v=20260606c"></script>
     <script src="modules/exam.js?v=20260605o"></script>
-    <script src="modules/materials.js?v=20260606c"></script>
+    <script src="modules/essay.js?v=20260607a"></script>
+    <script src="modules/materials.js?v=20260607a"></script>
     <script src="app.js?v=20260606b"></script>
   </body>
 </html>
