@@ -42,8 +42,10 @@
 
 ```powershell
 cd d:\Project\Python\time_planner
-.\deploy-github.ps1
+powershell -ExecutionPolicy Bypass -File .\deploy-github.ps1
 ```
+
+或直接双击 `deploy-github.bat`（推荐，无需改系统策略）。
 
 脚本会引导你登录 GitHub、创建仓库并开启 Pages。完成后访问：
 
