@@ -5,6 +5,7 @@
     review: "复盘概览",
     projects: "实习项目",
     exam: "考公备考",
+    essay: "申论积累",
     materials: "资料库"
   };
 
@@ -27,6 +28,7 @@
       document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
       document.getElementById(`${view}View`)?.classList.add("active");
       document.getElementById("pageTitle").textContent = VIEW_TITLES[view] || view;
+      if (view === "essay") window.PlannerEssay?.renderAll?.(store, true);
     }
   };
 
@@ -215,9 +217,12 @@
 
   function rerenderAll() {
     window.PlannerDashboard?.renderAll?.(store);
+    window.PlannerEssay?.renderAll?.(store);
     window.PlannerMaterials?.render?.(store, app);
     window.PlannerProjects?.renderWeeklyGoals?.(store);
   }
+
+  window.PlannerApp = app;
 
   function init() {
     document.getElementById("todayPill").textContent = new Intl.DateTimeFormat("zh-CN", {
@@ -232,6 +237,7 @@
     window.PlannerDashboard.init(store, app);
     window.PlannerProjects.init(store);
     window.PlannerExam.init(store);
+    window.PlannerEssay.init(store);
     window.PlannerMaterials.init(store, app);
 
     window.PlannerNotifications.startScheduler(
