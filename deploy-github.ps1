@@ -18,7 +18,7 @@ foreach ($Candidate in $GhCandidates) {
 }
 
 if (-not $Gh) {
-  Write-Host "正在下载 GitHub CLI..."
+  Write-Host "Downloading GitHub CLI..."
   $ghDir = Join-Path $env:TEMP "gh-cli"
   New-Item -ItemType Directory -Force -Path $ghDir | Out-Null
   $zip = Join-Path $ghDir "gh.zip"
@@ -34,13 +34,13 @@ if (-not (Test-Path ".git")) {
 git add -A
 $Status = git status --porcelain
 if ($Status) {
-  git commit -m "部署双线计划台到 GitHub Pages"
+  git commit -m "deploy: update site"
 }
 
-& $Gh auth status *> $null
+$auth = & $Gh auth status 2>&1
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
-  Write-Host "请先登录 GitHub（会打开浏览器）："
+  Write-Host "Please login to GitHub in the browser:"
   & $Gh auth login --hostname github.com --git-protocol https --web
 }
 
@@ -50,21 +50,21 @@ $Remote = git remote get-url origin 2>$null
 
 if (-not $Remote) {
   Write-Host ""
-  Write-Host "正在创建仓库 $User/$RepoName ..."
-  & $Gh repo create $RepoName --public --source=. --remote=origin --push --description "双线计划台 - 实习+考公"
+  Write-Host "Creating repo $User/$RepoName ..."
+  & $Gh repo create $RepoName --public --source=. --remote=origin --push --description "time-planner"
 } else {
   Write-Host ""
-  Write-Host "正在推送到 GitHub..."
+  Write-Host "Pushing to GitHub..."
   git push -u origin main
 }
 
 Write-Host ""
-Write-Host "正在开启 GitHub Pages..."
+Write-Host "Enabling GitHub Pages..."
 & $Gh api -X PUT "repos/$User/$RepoName/pages" -f "build_type=workflow" | Out-Null
 
 $PagesUrl = "https://$User.github.io/$RepoName/"
 Write-Host ""
-Write-Host "部署已提交！"
-Write-Host "网站地址（约 1-2 分钟后生效）： $PagesUrl"
+Write-Host "Done!"
+Write-Host "Site URL (ready in 1-2 min): $PagesUrl"
 Write-Host ""
-Write-Host "以后改完代码，再运行一次本脚本即可更新网站。"
+Write-Host "Run this script again after code changes to update the site."
