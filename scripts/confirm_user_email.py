@@ -4,9 +4,12 @@ import sys
 
 import psycopg2
 
-EMAIL = sys.argv[1] if len(sys.argv) > 1 else "1178541066@qq.com"
-PASSWORD = os.environ.get("SUPABASE_DB_PASSWORD", "CDAzkP9Cy7rqLAsY")
+EMAIL = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("SUPABASE_CONFIRM_EMAIL", "")
+PASSWORD = os.environ.get("SUPABASE_DB_PASSWORD", "")
 PROJECT_REF = "hxgdjzpjcmzgsojhhoio"
+
+if not EMAIL or not PASSWORD:
+    raise SystemExit("用法: python scripts/confirm_user_email.py 邮箱@example.com（需设置 SUPABASE_DB_PASSWORD）")
 
 
 def connect():

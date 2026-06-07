@@ -37,8 +37,15 @@ if ($Status) {
   git commit -m "deploy: update site"
 }
 
-$auth = & $Gh auth status 2>&1
-if ($LASTEXITCODE -ne 0) {
+$loggedIn = $true
+try {
+  & $Gh auth status 1>$null 2>$null
+  if ($LASTEXITCODE -ne 0) { $loggedIn = $false }
+} catch {
+  $loggedIn = $false
+}
+
+if (-not $loggedIn) {
   Write-Host ""
   Write-Host "Please login to GitHub in the browser:"
   & $Gh auth login --hostname github.com --git-protocol https --web
@@ -46,7 +53,12 @@ if ($LASTEXITCODE -ne 0) {
 
 $RepoName = "time-planner"
 $User = (& $Gh api user -q .login)
-$Remote = git remote get-url origin 2>$null
+$Remote = ""
+try {
+  $Remote = git remote get-url origin 2>$null
+} catch {
+  $Remote = ""
+}
 
 if (-not $Remote) {
   Write-Host ""

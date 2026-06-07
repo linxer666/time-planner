@@ -36,7 +36,22 @@
 
 未配置 Supabase 时，数据保存在浏览器 localStorage + IndexedDB（资料文件）。
 
-### 2. 配置 Supabase 数据库（推荐）
+### 2. 部署到 GitHub Pages（固定网址）
+
+第一次部署：
+
+```powershell
+cd d:\Project\Python\time_planner
+.\deploy-github.ps1
+```
+
+脚本会引导你登录 GitHub、创建仓库并开启 Pages。完成后访问：
+
+`https://你的GitHub用户名.github.io/time-planner/`
+
+以后改完功能，再运行一次 `.\deploy-github.ps1`（或 `git push`）即可自动更新网站。
+
+### 3. 配置 Supabase 数据库（推荐）
 
 #### 第一步：创建 Supabase 项目
 
