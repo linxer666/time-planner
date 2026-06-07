@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>双线计划台</title>
+    <link rel="stylesheet" href="styles.css?v=20260606f" />
+    <link rel="stylesheet" href="planner.css?v=20260606k" />
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">计</span>
+          <div>
+            <strong>双线计划台</strong>
+            <small>实习 · 考公 · 资料</small>
+          </div>
+        </div>
+        <nav class="nav-tabs" aria-label="主模块">
+          <button class="nav-tab active" data-view="dashboard">今日计划</button>
+          <button class="nav-tab" data-view="review">复盘概览</button>
+          <button class="nav-tab" data-view="projects">实习项目</button>
+          <button class="nav-tab" data-view="exam">考公备考</button>
+          <button class="nav-tab" data-view="materials">资料库</button>
+        </nav>
+        <section class="sidebar-cloud-panel" id="cloudPanel">
+          <div class="profile-row">
+            <div class="avatar-uploader" title="用户头像">
+              <span id="avatarInitial">我</span>
+            </div>
+            <div class="profile-copy">
+              <p class="eyebrow">账号同步</p>
+              <h2 id="cloudTitle">登录后同步数据</h2>
+              <p id="cloudStatus">未登录时仍可本地使用。</p>
+            </div>
+          </div>
+          <form class="cloud-form" id="authForm">
+            <input id="authEmail" type="email" placeholder="邮箱" autocomplete="email" />
+            <input id="authPassword" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password" />
+            <button class="primary-btn" type="submit">登录</button>
+            <button class="ghost-btn" type="button" id="signUpBtn">注册</button>
+          </form>
+          <div class="cloud-actions hidden" id="cloudActions">
+            <button class="ghost-btn" type="button" id="syncCloudData">同步云端</button>
+            <button class="ghost-btn" type="button" id="exportLocalData">导出备份</button>
+            <button class="ghost-btn" type="button" id="importLocalData">导入备份</button>
+            <input class="hidden" id="importDataFile" type="file" accept="application/json" />
+            <button class="ghost-btn danger-btn" type="button" id="signOutBtn">退出登录</button>
+          </div>
+        </section>
+        <details class="storage-card safety-card">
+          <summary>
+            <span id="storageMode">本地存储</span>
+            <strong>提醒设置</strong>
+          </summary>
+          <div class="safety-list">
+            <label>早上提醒
+              <input id="morningReminder" type="time" value="09:30" />
+            </label>
+            <label>晚上提醒
+              <input id="eveningReminder" type="time" value="22:00" />
+            </label>
+            <button class="ghost-btn full-btn" type="button" id="enableNotifications">开启浏览器提醒</button>
+            <p class="muted small-hint" id="notificationStatus">提醒需要浏览器授权</p>
+          </div>
+        </details>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">实习 + 考公双线并行</p>
+            <h1 id="pageTitle">今日计划</h1>
+          </div>
+          <div class="today-pill" id="todayPill"></div>
+        </header>
+
+        <!-- ========== 今日计划 ========== -->
+        <section id="dashboardView" class="view active">
+          <div class="dashboard-grid">
+            <article class="panel dash-card full-width" id="morningPlanCard">
+              <div class="section-head compact">
+                <div>
+                  <p class="eyebrow" id="selectedDateEyebrow">今天</p>
+                  <h2 id="selectedDateTitle">今日任务</h2>
+                </div>
+                <div class="task-actions">
+                  <button class="ghost-btn sm-btn" type="button" id="jumpTodayBtn">回到今天</button>
+                  <span class="badge" id="planStatusBadge">0/0</span>
+                </div>
+              </div>
+
+              <div>
+                <form id="addDailyTaskForm" class="grid-form add-task-form">
+                  <label>任务内容<input id="dailyTaskTitle" placeholder="如：写完数据清洗脚本" required /></label>
+                  <label>归属
+                    <select id="dailyTaskTrack">
+                      <option value="intern">实习</option>
+                      <option value="exam">考公</option>
+                    </select>
+                  </label>
+                  <label id="dailyTaskProjectWrap">项目
+                    <select id="dailyTaskProject"><option value="">选择项目</option></select>
+                  </label>
+                  <label id="dailyTaskExamWrap" class="hidden">考公类型
+                    <select id="dailyTaskExamSubtype">
+                      <option value="practice">刷题</option>
+                      <option value="course">看课</option>
+                      <option value="review">复盘</option>
+                    </select>
+                  </label>
+                  <label class="add-task-btn-wrap">
+                    <span class="add-task-label-spacer" aria-hidden="true">添加</span>
+                    <button class="primary-btn sm-btn" type="submit">添加任务</button>
+                  </label>
+                </form>
+
+                <div class="legend">
+                  <span><i class="dot business"></i>实习项目</span>
+                  <span><i class="dot onboarding"></i>考公·刷题</span>
+                  <span><i class="dot growth"></i>考公·看课</span>
+                  <span><i class="dot pm"></i>考公·复盘</span>
+                </div>
+
+                <div class="today-task-list" id="dailyTaskList"></div>
+                <div class="inline-empty hidden" id="dailyTaskEmpty">今天还没有任务，在上面添加一条吧。</div>
+
+                <div class="calendar-toolbar">
+                  <button class="icon-btn" id="prevMonthBtn" type="button" title="上个月">‹</button>
+                  <h2 id="monthTitle"></h2>
+                  <button class="icon-btn" id="nextMonthBtn" type="button" title="下个月">›</button>
+                </div>
+                <div class="calendar-grid weekday-row">
+                  <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+                </div>
+                <div class="calendar-grid dash-calendar" id="dashCalendarGrid"></div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- ========== 复盘概览 ========== -->
+        <section id="reviewView" class="view">
+          <div class="review-grid">
+            <div class="review-main">
+              <article class="panel dash-card" id="eveningSummaryCard">
+                <div class="section-head compact">
+                  <div>
+                    <p class="eyebrow">晚上复盘</p>
+                    <h2>今日总结</h2>
+                  </div>
+                  <span class="badge" id="summaryStatusBadge">未填写</span>
+                </div>
+                <section class="review-tasks-block">
+                  <div class="section-head compact">
+                    <div>
+                      <p class="eyebrow">同步今日计划</p>
+                      <h3>今日任务完成情况</h3>
+                    </div>
+                    <span class="badge" id="reviewTaskBadge">0/0</span>
+                  </div>
+                  <div class="today-task-list" id="reviewTaskList"></div>
+                  <p class="inline-empty hidden" id="reviewTaskEmpty">今天还没有任务，去「今日计划」添加吧。</p>
+                </section>
+                <form id="dailySummaryForm" class="quick-form">
+                  <label>今日感悟（选填）<textarea id="summaryReflection" rows="2" placeholder="今天学了什么、哪里没搞懂"></textarea></label>
+                  <label>wolai 链接（选填）<input id="summaryWolaiLink" type="url" placeholder="https://..." /></label>
+                  <button class="primary-btn" type="submit">保存今日总结</button>
+                </form>
+              </article>
+
+              <article class="panel dash-card">
+                <div class="section-head compact">
+                  <div>
+                    <p class="eyebrow">本周重点</p>
+                    <h2>实习本周目标</h2>
+                  </div>
+                </div>
+                <ul class="goal-list" id="dashboardWeeklyGoals"></ul>
+              </article>
+            </div>
+
+            <aside class="review-sidebar">
+              <article class="stat-card rejected review-stat-card">
+                <span>本周完成率</span>
+                <strong id="weeklyCompletionRate">0%</strong>
+                <small>每日任务 + 考公打卡</small>
+              </article>
+
+              <article class="panel dash-card review-urgent-card">
+                <div class="section-head compact">
+                  <div>
+                    <p class="eyebrow">3 天内到期</p>
+                    <h2>紧急任务提醒</h2>
+                  </div>
+                </div>
+                <ul class="urgent-list" id="urgentTasksList"></ul>
+              </article>
+            </aside>
+          </div>
+        </section>
+
+        <!-- ========== 实习项目管理 ========== -->
+        <section id="projectsView" class="view">
+          <div class="projects-layout">
+            <aside class="panel project-sidebar">
+              <div class="section-head compact">
+                <div>
+                  <p class="eyebrow">项目列表</p>
+                  <h2>实习项目</h2>
+                </div>
+                <button class="primary-btn sm-btn" type="button" id="addProjectBtn">+ 项目</button>
+              </div>
+              <ul class="project-list" id="projectList"></ul>
+            </aside>
+            <div class="project-main">
+              <div class="project-extras">
+                <article class="panel extra-panel">
+                  <div class="section-head compact">
+                    <div>
+                      <p class="eyebrow" id="weeklyWeekLabel">每周一设定</p>
+                      <h2>本周重点</h2>
+                    </div>
+                  </div>
+                  <p class="panel-hint">新一周直接写新的，上周会自动收起，不用删。</p>
+                  <form id="weeklyGoalForm" class="compose-form">
+                    <input id="weeklyGoalInput" placeholder="写一条本周重点" maxlength="100" />
+                    <div class="compose-actions">
+                      <button class="primary-btn compose-btn" type="submit">添加</button>
+                    </div>
+                  </form>
+                  <ul class="goal-list" id="weeklyGoalsList"></ul>
+                </article>
+                <article class="panel extra-panel">
+                  <div class="section-head compact">
+                    <div>
+                      <p class="eyebrow">技术学习</p>
+                      <h2>to-learn 清单</h2>
+                    </div>
+                  </div>
+                  <p class="panel-hint">长期想学清单，学完勾选或删掉，不用每周清空。</p>
+                  <form id="techTodoForm" class="compose-form">
+                    <input id="techTodoInput" placeholder="如：读 ResNet 论文" />
+                    <div class="compose-actions">
+                      <button class="primary-btn compose-btn" type="submit">添加</button>
+                    </div>
+                  </form>
+                  <ul class="check-list" id="techTodosList"></ul>
+                </article>
+                <article class="panel extra-panel">
+                  <div class="section-head compact">
+                    <div>
+                      <p class="eyebrow">选填</p>
+                      <h2>实习日志</h2>
+                    </div>
+                  </div>
+                  <p class="panel-hint">选填，积累面试素材。</p>
+                  <form id="workLogForm" class="compose-form">
+                    <textarea id="workLogInput" rows="3" placeholder="今天做了什么 / 遇到什么问题 / 怎么解决"></textarea>
+                    <div class="compose-actions">
+                      <button class="primary-btn compose-btn" type="submit">记录</button>
+                    </div>
+                  </form>
+                  <ul class="log-list" id="workLogsList"></ul>
+                </article>
+              </div>
+              <div id="projectDetailArea" class="panel project-detail">
+                <p class="empty-state">选择一个项目，或新建一个项目开始管理。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== 考公备考中心 ========== -->
+        <section id="examView" class="view">
+          <div class="countdown-row exam-countdown-row">
+            <article class="stat-card total countdown-card">
+              <span>国考笔试</span>
+              <strong id="guokaoCountdown">--</strong>
+              <small id="guokaoDateLabel">未设置日期</small>
+              <input class="date-input-sm" id="guokaoExamDate" type="date" title="设置国考笔试日期" />
+            </article>
+            <article class="stat-card approved countdown-card">
+              <span>广东省考笔试</span>
+              <strong id="guangdongCountdown">--</strong>
+              <small id="guangdongDateLabel">未设置日期</small>
+              <input class="date-input-sm" id="guangdongExamDate" type="date" title="设置省考笔试日期" />
+            </article>
+            <article class="stat-card selection countdown-card">
+              <span>广东选调考试</span>
+              <strong id="xuandiaoCountdown">--</strong>
+              <small id="xuandiaoDateLabel">未设置日期</small>
+              <input class="date-input-sm" id="xuandiaoExamDate" type="date" title="设置广东选调考试日期" />
+            </article>
+          </div>
+
+          <div class="exam-tabs" role="tablist">
+            <button class="exam-tab active" data-exam-tab="study">刷题记录</button>
+            <button class="exam-tab" data-exam-tab="courses">看课进度</button>
+            <button class="exam-tab" data-exam-tab="summaries">每日总结</button>
+            <button class="exam-tab" data-exam-tab="calendar">考试日历</button>
+          </div>
+
+          <div id="examStudyPanel" class="exam-panel active">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">刷题 → 看课 → 复盘</p>
+                <h2>刷题记录</h2>
+              </div>
+            </div>
+            <form id="studyRecordForm" class="study-record-card">
+              <div class="study-fields-grid">
+                <div class="study-field">
+                  <span class="study-field-label">科目</span>
+                  <select id="studySubject">
+                    <option value="行测">行测</option>
+                    <option value="申论">申论</option>
+                  </select>
+                  <span class="study-field-foot" aria-hidden="true"></span>
+                </div>
+                <div class="study-field">
+                  <span class="study-field-label">题型</span>
+                  <select id="studyQuestionCategory" required></select>
+                  <span class="study-type-hint" id="studyQuestionHint"></span>
+                </div>
+                <div class="study-field">
+                  <span class="study-field-label">细分题型</span>
+                  <select id="studyQuestionSubtype"></select>
+                  <span class="study-field-foot" aria-hidden="true"></span>
+                </div>
+                <div class="study-field study-field-narrow">
+                  <span class="study-field-label">题量</span>
+                  <input id="studyQuestionCount" type="number" min="0" required placeholder="0" />
+                  <span class="study-field-foot" aria-hidden="true"></span>
+                </div>
+                <div class="study-field study-field-narrow">
+                  <span class="study-field-label">正确率</span>
+                  <div class="study-input-suffix">
+                    <input id="studyAccuracy" type="number" min="0" max="100" placeholder="—" />
+                    <span>%</span>
+                  </div>
+                  <span class="study-field-foot" aria-hidden="true"></span>
+                </div>
+              </div>
+              <div class="study-footer-bar">
+                <div class="study-paper-fields">
+                  <label class="paper-fields hidden" id="paperNameLabel">
+                    <span class="study-field-label">卷子名称</span>
+                    <input id="studyPaperName" placeholder="如：2024 国考行测" />
+                  </label>
+                  <label class="paper-fields hidden" id="paperScoreLabel">
+                    <span class="study-field-label">得分</span>
+                    <input id="studyPaperScore" placeholder="72/100" />
+                  </label>
+                </div>
+                <div class="study-footer-actions">
+                  <label class="study-paper-toggle">
+                    <input id="studyIsPaper" type="checkbox" />
+                    <span>纸质卷模式</span>
+                  </label>
+                  <button class="primary-btn study-submit-btn" type="submit">记录刷题</button>
+                </div>
+              </div>
+            </form>
+            <div class="study-stats-row">
+              <div class="chart-wrap">
+                <p class="chart-eyebrow">正确率趋势</p>
+                <canvas id="accuracyChart" height="120"></canvas>
+              </div>
+              <ul class="record-list study-record-list" id="studyRecordsList"></ul>
+            </div>
+          </div>
+
+          <div id="examCoursesPanel" class="exam-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">B站 / 网课</p>
+                <h2>看课进度</h2>
+              </div>
+              <button class="primary-btn sm-btn" type="button" id="addCourseBtn">+ 课程</button>
+            </div>
+            <div id="coursesList" class="courses-grid"></div>
+          </div>
+
+          <div id="examSummariesPanel" class="exam-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">轻量复盘</p>
+                <h2>每日学习总结</h2>
+              </div>
+            </div>
+            <div class="exam-content-card">
+              <ul class="record-list" id="examSummariesList"></ul>
+            </div>
+          </div>
+
+          <div id="examCalendarPanel" class="exam-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">国考 + 广东省考</p>
+                <h2>考试日历</h2>
+              </div>
+              <button class="primary-btn sm-btn" type="button" id="addExamEventBtn">+ 事件</button>
+            </div>
+            <div class="exam-content-card">
+              <ul class="record-list" id="examEventsList"></ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== 资料库 ========== -->
+        <section id="materialsView" class="view">
+          <div class="section-head materials-head">
+            <div>
+              <p class="eyebrow">PDF / Word</p>
+              <h2>考公 & 实习资料库</h2>
+            </div>
+            <button class="primary-btn" type="button" id="uploadMaterialBtn">上传资料</button>
+            <input class="hidden" id="materialFileInput" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+          </div>
+
+          <div class="materials-toolbar">
+            <label class="materials-field">
+              <span class="materials-field-label">搜索</span>
+              <input id="materialSearch" type="search" placeholder="搜索文件名..." />
+            </label>
+            <label class="materials-field materials-field-narrow">
+              <span class="materials-field-label">标签筛选</span>
+              <select id="materialTagFilter">
+                <option value="">全部标签</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="materials-content-card">
+            <div class="material-grid" id="materialGrid"></div>
+            <div class="empty-state" id="materialEmpty">还没有资料，点击右上角「上传资料」添加 PDF 或 Word 文件。</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- 通用弹窗 -->
+    <dialog class="modal" id="genericDialog">
+      <div class="modal-box">
+        <div class="modal-head">
+          <h2 id="genericDialogTitle">标题</h2>
+          <button class="icon-btn" type="button" id="closeGenericDialog">×</button>
+        </div>
+        <div id="genericDialogBody"></div>
+      </div>
+    </dialog>
+
+    <!-- PDF 预览 -->
+    <dialog class="modal media-modal" id="pdfPreviewDialog">
+      <div class="modal-box wide-modal">
+        <div class="modal-head">
+          <h2 id="pdfPreviewTitle">预览</h2>
+          <button class="icon-btn" type="button" id="closePdfPreview">×</button>
+        </div>
+        <iframe id="pdfPreviewFrame" title="PDF 预览"></iframe>
+      </div>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="modules/data-store.js?v=20260606d"></script>
+    <script src="modules/dialog.js?v=20260605b"></script>
+    <script src="modules/notifications.js?v=20260605b"></script>
+    <script src="modules/dashboard.js?v=20260605f"></script>
+    <script src="modules/projects.js?v=20260605n"></script>
+    <script src="modules/exam-taxonomy.js?v=20260606c"></script>
+    <script src="modules/exam.js?v=20260605o"></script>
+    <script src="modules/materials.js?v=20260606c"></script>
+    <script src="app.js?v=20260606b"></script>
+  </body>
+</html>

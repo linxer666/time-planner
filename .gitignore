@@ -1,0 +1,1 @@
+# supabase-config.js 需要随站部署（anon key 为前端公开密钥，数据安全靠 Supabase RLS）
