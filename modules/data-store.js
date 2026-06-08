@@ -349,13 +349,39 @@
       return next;
     }
 
-    async syncWithCloud() {
+    async pushDeltaToCloud(beforeMergeLocal, cloudData) {
+      await this.syncSettingsToCloud();
+      for (const table of TABLES) {
+        if (table === "settings") continue;
+        const cloudById = new Map((cloudData[table] || []).map((row) => [row.id, row]));
+        for (const row of this.list(table)) {
+          if (table === "materials" && row.local_only) continue;
+          const cloudRow = cloudById.get(row.id);
+          const localBefore = (beforeMergeLocal[table] || []).find((item) => item.id === row.id);
+          const isNewLocally = !!localBefore && !cloudRow;
+          const isUpdatedLocally = !!localBefore && !!cloudRow && this.rowTimestamp(localBefore) > this.rowTimestamp(cloudRow);
+          if (isNewLocally || isUpdatedLocally) {
+            try {
+              await this.cloudUpsert(table, this.mapToCloud(table, row));
+            } catch (err) {
+              console.warn(`上传失败 [${table}]`, err.message);
+            }
+          }
+        }
+      }
+    }
+
+    async syncWithCloud(options = {}) {
       if (!this.cloudReady) throw new Error("请先登录 Supabase");
       const localSnapshot = this.cloneData(this.data);
       const cloudData = await this.fetchFromCloud();
       this.data = this.mergeData(localSnapshot, cloudData);
       this.saveLocal();
-      await this.pushToCloud({ silent: true, skipEmailCheck: true });
+      if (options.fullPush) {
+        await this.pushToCloud({ silent: true, skipEmailCheck: true });
+      } else {
+        await this.pushDeltaToCloud(localSnapshot, cloudData);
+      }
       return this.data;
     }
 

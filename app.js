@@ -63,16 +63,19 @@
     if (evening) evening.value = settings.evening_reminder || "22:00";
   }
 
-  async function autoSyncCloud(force = false) {
+  async function autoSyncCloud(force = false, options = {}) {
     if (!store.cloudReady) return false;
     const now = Date.now();
     if (!force && now - lastAutoSyncAt < AUTO_SYNC_COOLDOWN_MS) return false;
     if (syncInFlight) return syncInFlight;
     syncInFlight = (async () => {
       try {
-        await store.syncWithCloud();
+        await store.syncWithCloud(options);
         lastAutoSyncAt = Date.now();
         return true;
+      } catch (err) {
+        console.warn("自动同步失败", err);
+        return false;
       } finally {
         syncInFlight = null;
       }
@@ -84,6 +87,24 @@
     refreshSettingsUI();
     rerenderAll();
     updateCloudUI(message || "数据已自动同步");
+  }
+
+  function completeLogin(user, message) {
+    store.initSupabase(supabaseClient, user);
+    updateCloudUI(message || "登录成功");
+    refreshSettingsUI();
+    rerenderAll();
+  }
+
+  function runBackgroundSync(successMessage) {
+    updateCloudUI("正在同步数据…");
+    void autoSyncCloud(true).then((synced) => {
+      if (synced) {
+        afterCloudSync(successMessage || "数据已自动同步");
+        return;
+      }
+      updateCloudUI("登录成功，云端同步未完成，可稍后点「同步云端」");
+    });
   }
 
   function updateCloudUI(message) {
@@ -103,13 +124,16 @@
     try {
       const { data } = await supabaseClient.auth.getSession();
       if (data.session?.user) {
-        store.initSupabase(supabaseClient, data.session.user);
-        await autoSyncCloud(true);
-        await afterCloudSync("已恢复登录，数据已自动同步。");
+        completeLogin(data.session.user, "已恢复登录，正在同步…");
+        runBackgroundSync("已恢复登录，数据已自动同步。");
       }
     } catch (err) {
       console.warn(err);
-      updateCloudUI("云端连接失败，继续使用本地数据。");
+      if (store.user) {
+        updateCloudUI("登录成功，云端同步失败，可稍后点「同步云端」");
+      } else {
+        updateCloudUI("云端连接失败，继续使用本地数据。");
+      }
     }
   }
 
@@ -123,14 +147,36 @@
         app.toast("请先配置 supabase-config.js");
         return;
       }
+      const submitBtn = e.target.querySelector('button[type="submit"]');
       const email = emailInput.value.trim();
       const password = document.getElementById("authPassword").value;
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) { app.toast(error.message); return; }
-      localStorage.setItem(LAST_EMAIL_KEY, email);
-      store.initSupabase(supabaseClient, data.user);
-      await autoSyncCloud(true);
-      await afterCloudSync("登录成功，数据已自动同步");
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "登录中…";
+      }
+      try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) {
+          app.toast(error.message);
+          return;
+        }
+        const user = data.session?.user || data.user;
+        if (!user) {
+          app.toast("登录失败：未获取到用户信息");
+          return;
+        }
+        localStorage.setItem(LAST_EMAIL_KEY, email);
+        completeLogin(user, "登录成功，正在同步…");
+        runBackgroundSync("登录成功，数据已自动同步");
+      } catch (err) {
+        console.error("login failed", err);
+        app.toast(err.message || "登录失败");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "登录";
+        }
+      }
     });
 
     document.getElementById("signUpBtn")?.addEventListener("click", async () => {
@@ -161,7 +207,8 @@
       btn.disabled = true;
       btn.textContent = "同步中…";
       try {
-        await autoSyncCloud(true);
+        const synced = await autoSyncCloud(true, { fullPush: true });
+        if (!synced) throw new Error("同步未完成，请稍后重试");
         await afterCloudSync("同步成功，本地与云端已对齐");
         app.toast("数据已双向同步");
       } catch (err) {
@@ -207,15 +254,10 @@
     });
 
     if (supabaseClient) {
-      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+      supabaseClient.auth.onAuthStateChange((_event, session) => {
         if (session?.user) {
           store.initSupabase(supabaseClient, session.user);
-          if (_event === "SIGNED_IN") {
-            await autoSyncCloud(true);
-            await afterCloudSync("登录成功，数据已自动同步");
-          } else {
-            updateCloudUI();
-          }
+          updateCloudUI();
         } else if (_event === "SIGNED_OUT") {
           store.clearSupabase();
           updateCloudUI("未登录，当前使用本地缓存。");
