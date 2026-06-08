@@ -9,6 +9,12 @@
     "essay_user_actions", "settings"
   ];
 
+  const SETTINGS_KEYS = [
+    "morning_reminder", "evening_reminder",
+    "guokao_exam_date", "guangdong_exam_date", "xuandiao_exam_date",
+    "dashboard_view"
+  ];
+
   const emptyData = () => ({
     projects: [],
     milestones: [],
@@ -130,8 +136,112 @@
     async updateSettings(patch) {
       this.data.settings = { ...this.data.settings, ...patch };
       this.saveLocal();
-      if (this.cloudReady) {
-        await this.supabase.from("user_settings").upsert(this.mapToCloud("settings", this.data.settings));
+      await this.syncSettingsToCloud();
+    }
+
+    isEmptySetting(value) {
+      return value == null || value === "";
+    }
+
+    normalizeDate(value) {
+      if (this.isEmptySetting(value)) return "";
+      return String(value).slice(0, 10);
+    }
+
+    normalizeCloudSettings(data) {
+      if (!data) return { ...emptyData().settings };
+      return {
+        morning_reminder: data.morning_reminder?.slice(0, 5) || "09:30",
+        evening_reminder: data.evening_reminder?.slice(0, 5) || "22:00",
+        guokao_exam_date: this.normalizeDate(data.guokao_exam_date),
+        guangdong_exam_date: this.normalizeDate(data.guangdong_exam_date),
+        xuandiao_exam_date: this.normalizeDate(data.xuandiao_exam_date),
+        dashboard_view: data.dashboard_view || "tasks",
+        updated_at: data.updated_at || null
+      };
+    }
+
+    mergeSettings(localSettings, cloudSettings) {
+      const defaults = emptyData().settings;
+      const local = { ...defaults, ...localSettings };
+      const cloud = { ...defaults, ...cloudSettings };
+      const merged = { ...defaults };
+      SETTINGS_KEYS.forEach((key) => {
+        const cloudVal = cloud[key];
+        const localVal = local[key];
+        if (!this.isEmptySetting(cloudVal)) merged[key] = cloudVal;
+        else if (!this.isEmptySetting(localVal)) merged[key] = localVal;
+        else merged[key] = defaults[key];
+      });
+      return merged;
+    }
+
+    rowTimestamp(row) {
+      const value = row?.updated_at || row?.created_at;
+      return value ? new Date(value).getTime() : 0;
+    }
+
+    normalizeCloudRow(row) {
+      const copy = { ...row };
+      if (copy.record_date) copy.record_date = copy.record_date.slice(0, 10);
+      if (copy.plan_date) copy.plan_date = copy.plan_date.slice(0, 10);
+      if (copy.summary_date) copy.summary_date = copy.summary_date.slice(0, 10);
+      if (copy.log_date) copy.log_date = copy.log_date.slice(0, 10);
+      if (copy.deadline) copy.deadline = copy.deadline.slice(0, 10);
+      if (copy.event_date) copy.event_date = copy.event_date.slice(0, 10);
+      if (copy.task_date) copy.task_date = copy.task_date.slice(0, 10);
+      if (copy.deadline_date) copy.deadline_date = copy.deadline_date.slice(0, 10);
+      if (copy.start_date) copy.start_date = copy.start_date?.slice(0, 10) || "";
+      if (copy.end_date) copy.end_date = copy.end_date?.slice(0, 10) || "";
+      if (copy.accuracy != null) copy.accuracy = Number(copy.accuracy);
+      return copy;
+    }
+
+    mergeTableRows(localRows, cloudRows) {
+      const byId = new Map();
+      cloudRows.forEach((row) => byId.set(row.id, row));
+      localRows.forEach((row) => {
+        const existing = byId.get(row.id);
+        if (!existing) {
+          byId.set(row.id, row);
+          return;
+        }
+        byId.set(row.id, this.rowTimestamp(row) > this.rowTimestamp(existing) ? row : existing);
+      });
+      return [...byId.values()].sort((a, b) => this.rowTimestamp(a) - this.rowTimestamp(b));
+    }
+
+    mergeData(localData, cloudData) {
+      const merged = emptyData();
+      merged.settings = this.mergeSettings(localData.settings, cloudData.settings);
+      TABLES.forEach((table) => {
+        if (table === "settings") return;
+        merged[table] = this.mergeTableRows(localData[table] || [], cloudData[table] || []);
+      });
+      const localOnlyMaterials = (localData.materials || []).filter((item) => item.local_only);
+      if (localOnlyMaterials.length) {
+        const cloudIds = new Set(merged.materials.map((item) => item.id));
+        merged.materials = [
+          ...merged.materials,
+          ...localOnlyMaterials.filter((item) => !cloudIds.has(item.id))
+        ];
+      }
+      return merged;
+    }
+
+    cloneData(data) {
+      return JSON.parse(JSON.stringify(data));
+    }
+
+    async syncSettingsToCloud() {
+      if (!this.cloudReady) return;
+      try {
+        const { error } = await this.supabase
+          .from("user_settings")
+          .upsert(this.mapToCloud("settings", this.data.settings));
+        if (error) throw error;
+      } catch (err) {
+        console.warn("设置同步失败", err.message);
       }
     }
 
@@ -186,86 +296,74 @@
       if (error) throw error;
     }
 
-    async pushToCloud() {
+    async pushToCloud(options = {}) {
       if (!this.cloudReady) throw new Error("请先登录 Supabase");
-      if (!this.user?.email_confirmed_at) {
+      if (!options.skipEmailCheck && !this.user?.email_confirmed_at) {
         throw new Error("邮箱未验证，无法同步。请在邮箱里点验证链接，或让管理员在 Supabase 后台确认邮箱。");
       }
-      const { error: settingsError } = await this.supabase
-        .from("user_settings")
-        .upsert(this.mapToCloud("settings", this.data.settings));
-      if (settingsError) throw settingsError;
+      await this.syncSettingsToCloud();
       for (const table of TABLES) {
         if (table === "settings") continue;
         for (const row of this.list(table)) {
           if (table === "materials" && row.local_only) continue;
-          await this.cloudUpsert(table, this.mapToCloud(table, row));
+          try {
+            await this.cloudUpsert(table, this.mapToCloud(table, row));
+          } catch (err) {
+            console.warn(`上传失败 [${table}]`, err.message);
+            if (!options.silent) throw err;
+          }
         }
       }
+    }
+
+    async fetchFromCloud() {
+      if (!this.cloudReady) return emptyData();
+      const next = emptyData();
+      for (const table of TABLES) {
+        if (table === "settings") {
+          try {
+            const { data, error } = await this.supabase
+              .from("user_settings")
+              .select("*")
+              .eq("user_id", this.user.id)
+              .maybeSingle();
+            if (error) throw error;
+            if (data) next.settings = this.normalizeCloudSettings(data);
+          } catch (err) {
+            console.warn("拉取 user_settings 失败", err.message);
+          }
+          continue;
+        }
+        try {
+          const { data, error } = await this.supabase
+            .from(table)
+            .select("*")
+            .eq("user_id", this.user.id)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          next[table] = (data || []).map((row) => this.normalizeCloudRow(row));
+        } catch (err) {
+          console.warn(`拉取 ${table} 失败`, err.message);
+        }
+      }
+      return next;
     }
 
     async syncWithCloud() {
       if (!this.cloudReady) throw new Error("请先登录 Supabase");
-      const localCount = TABLES.reduce((sum, table) => {
-        if (table === "settings") return sum;
-        return sum + this.list(table).length;
-      }, 0);
-      const { count: cloudCount, error } = await this.supabase
-        .from("projects")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", this.user.id);
-      if (error) throw error;
-      if (localCount > 0 && (cloudCount || 0) === 0) {
-        await this.pushToCloud();
-      }
-      await this.loadFromCloud();
+      const localSnapshot = this.cloneData(this.data);
+      const cloudData = await this.fetchFromCloud();
+      this.data = this.mergeData(localSnapshot, cloudData);
+      this.saveLocal();
+      await this.pushToCloud({ silent: true, skipEmailCheck: true });
+      return this.data;
     }
 
     async loadFromCloud() {
       if (!this.cloudReady) return;
-      const localOnlyMaterials = this.list("materials").filter((item) => item.local_only);
-      const next = emptyData();
-      for (const table of TABLES) {
-        if (table === "settings") {
-          const { data } = await this.supabase.from("user_settings").select("*").eq("user_id", this.user.id).maybeSingle();
-          if (data) {
-            next.settings = {
-              morning_reminder: data.morning_reminder?.slice(0, 5) || "09:30",
-              evening_reminder: data.evening_reminder?.slice(0, 5) || "22:00",
-              guokao_exam_date: data.guokao_exam_date || "",
-              guangdong_exam_date: data.guangdong_exam_date || "",
-              xuandiao_exam_date: data.xuandiao_exam_date || "",
-              dashboard_view: data.dashboard_view || "tasks"
-            };
-          }
-          continue;
-        }
-        const { data, error } = await this.supabase.from(table).select("*").eq("user_id", this.user.id).order("created_at", { ascending: true });
-        if (error) throw error;
-        next[table] = (data || []).map((row) => {
-          const copy = { ...row };
-          if (copy.record_date) copy.record_date = copy.record_date.slice(0, 10);
-          if (copy.plan_date) copy.plan_date = copy.plan_date.slice(0, 10);
-          if (copy.summary_date) copy.summary_date = copy.summary_date.slice(0, 10);
-          if (copy.log_date) copy.log_date = copy.log_date.slice(0, 10);
-          if (copy.deadline) copy.deadline = copy.deadline.slice(0, 10);
-          if (copy.event_date) copy.event_date = copy.event_date.slice(0, 10);
-          if (copy.task_date) copy.task_date = copy.task_date.slice(0, 10);
-          if (copy.deadline_date) copy.deadline_date = copy.deadline_date.slice(0, 10);
-          if (copy.start_date) copy.start_date = copy.start_date?.slice(0, 10) || "";
-          if (copy.end_date) copy.end_date = copy.end_date?.slice(0, 10) || "";
-          if (copy.accuracy != null) copy.accuracy = Number(copy.accuracy);
-          return copy;
-        });
-      }
-      if (localOnlyMaterials.length) {
-        const cloudIds = new Set(next.materials.map((item) => item.id));
-        next.materials = [
-          ...next.materials,
-          ...localOnlyMaterials.filter((item) => !cloudIds.has(item.id))
-        ];
-      }
-      this.data = next;
+      const localSnapshot = this.cloneData(this.data);
+      const cloudData = await this.fetchFromCloud();
+      this.data = this.mergeData(localSnapshot, cloudData);
       this.saveLocal();
     }
 

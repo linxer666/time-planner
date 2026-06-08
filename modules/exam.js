@@ -394,6 +394,14 @@
       renderExamEvents(store);
       window.addEventListener("resize", () => drawChart(store));
     },
+    renderAll(store) {
+      renderCountdown(store);
+      renderStudyRecords(store);
+      renderCourses(store);
+      renderSummaries(store);
+      renderExamEvents(store);
+      drawChart(store);
+    },
     renderSummaries
   };
 })();

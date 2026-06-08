@@ -11,6 +11,9 @@
 
   const store = window.PlannerStore;
   let supabaseClient = null;
+  let syncInFlight = null;
+  let lastAutoSyncAt = 0;
+  const AUTO_SYNC_COOLDOWN_MS = 5000;
 
   const app = {
     toast(msg) {
@@ -49,7 +52,38 @@
     if (!store.user.email_confirmed_at) {
       return "邮箱未验证，暂时无法同步。请查收验证邮件或关闭 Supabase 邮箱验证。";
     }
-    return "数据会同步到 Supabase";
+    return "登录后自动与云端双向同步";
+  }
+
+  function refreshSettingsUI() {
+    const settings = store.getSettings();
+    const morning = document.getElementById("morningReminder");
+    const evening = document.getElementById("eveningReminder");
+    if (morning) morning.value = settings.morning_reminder || "09:30";
+    if (evening) evening.value = settings.evening_reminder || "22:00";
+  }
+
+  async function autoSyncCloud(force = false) {
+    if (!store.cloudReady) return false;
+    const now = Date.now();
+    if (!force && now - lastAutoSyncAt < AUTO_SYNC_COOLDOWN_MS) return false;
+    if (syncInFlight) return syncInFlight;
+    syncInFlight = (async () => {
+      try {
+        await store.syncWithCloud();
+        lastAutoSyncAt = Date.now();
+        return true;
+      } finally {
+        syncInFlight = null;
+      }
+    })();
+    return syncInFlight;
+  }
+
+  async function afterCloudSync(message) {
+    refreshSettingsUI();
+    rerenderAll();
+    updateCloudUI(message || "数据已自动同步");
   }
 
   function updateCloudUI(message) {
@@ -70,8 +104,8 @@
       const { data } = await supabaseClient.auth.getSession();
       if (data.session?.user) {
         store.initSupabase(supabaseClient, data.session.user);
-        await store.syncWithCloud();
-        updateCloudUI("已恢复登录，数据已从云端加载。");
+        await autoSyncCloud(true);
+        await afterCloudSync("已恢复登录，数据已自动同步。");
       }
     } catch (err) {
       console.warn(err);
@@ -95,9 +129,8 @@
       if (error) { app.toast(error.message); return; }
       localStorage.setItem(LAST_EMAIL_KEY, email);
       store.initSupabase(supabaseClient, data.user);
-      await store.syncWithCloud();
-      updateCloudUI("登录成功，数据已同步");
-      rerenderAll();
+      await autoSyncCloud(true);
+      await afterCloudSync("登录成功，数据已自动同步");
     });
 
     document.getElementById("signUpBtn")?.addEventListener("click", async () => {
@@ -128,11 +161,9 @@
       btn.disabled = true;
       btn.textContent = "同步中…";
       try {
-        await store.pushToCloud();
-        await store.loadFromCloud();
-        updateCloudUI("同步成功，本地与云端已对齐");
-        app.toast("本地数据已上传并同步");
-        rerenderAll();
+        await autoSyncCloud(true);
+        await afterCloudSync("同步成功，本地与云端已对齐");
+        app.toast("数据已双向同步");
       } catch (err) {
         const msg = err.message || "同步失败";
         updateCloudUI(msg);
@@ -163,18 +194,28 @@
       try {
         const text = await file.text();
         store.importBackup(text);
-        app.toast("备份已导入");
-        rerenderAll();
+        if (store.cloudReady) {
+          await autoSyncCloud(true);
+          await afterCloudSync("备份已导入并同步到云端");
+        } else {
+          app.toast("备份已导入");
+          rerenderAll();
+        }
       } catch (err) {
         app.toast("导入失败：" + err.message);
       }
     });
 
     if (supabaseClient) {
-      supabaseClient.auth.onAuthStateChange((_event, session) => {
+      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           store.initSupabase(supabaseClient, session.user);
-          updateCloudUI("登录状态已更新");
+          if (_event === "SIGNED_IN") {
+            await autoSyncCloud(true);
+            await afterCloudSync("登录成功，数据已自动同步");
+          } else {
+            updateCloudUI();
+          }
         } else if (_event === "SIGNED_OUT") {
           store.clearSupabase();
           updateCloudUI("未登录，当前使用本地缓存。");
@@ -217,6 +258,7 @@
 
   function rerenderAll() {
     window.PlannerDashboard?.renderAll?.(store);
+    window.PlannerExam?.renderAll?.(store);
     window.PlannerEssay?.renderAll?.(store);
     window.PlannerMaterials?.render?.(store, app);
     window.PlannerProjects?.renderWeeklyGoals?.(store);
@@ -253,6 +295,13 @@
     );
 
     restoreSession();
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || !store.cloudReady) return;
+      autoSyncCloud().then((synced) => {
+        if (synced) afterCloudSync();
+      }).catch((err) => console.warn("自动同步失败", err));
+    });
 
     const params = new URLSearchParams(location.search);
     if (params.get("reminder") === "morning") app.navigate("dashboard");
