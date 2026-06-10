@@ -18,6 +18,10 @@ create table if not exists essay_materials (
   golden_sentences jsonb default '[]',
   evidence_cases jsonb default '[]',
   policy_suggestions jsonb default '[]',
+  argument_points jsonb default '[]',
+  article_structure jsonb default '{}',
+  paragraph_logic text default '',
+  related_policies jsonb default '[]',
   applicable_types text[] default '{}',
   ai_summary text default '',
   created_at timestamptz default now()

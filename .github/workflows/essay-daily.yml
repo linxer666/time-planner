@@ -1,0 +1,70 @@
+name: Daily Essay Update
+
+on:
+  schedule:
+    # 北京时间每天 07:00（UTC 23:00）
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: essay-daily
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Write .env from secrets
+        run: |
+          cat > .env <<EOF
+          AI_API_URL=${{ secrets.AI_API_URL }}
+          AI_API_KEY=${{ secrets.AI_API_KEY }}
+          AI_MODEL=${{ secrets.AI_MODEL }}
+          EOF
+
+      - name: Run daily essay pipeline
+        run: python scripts/essay_pipeline.py --daily
+
+      - name: Commit and push if changed
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/essay_public.json
+          if git diff --staged --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes today"
+            exit 0
+          fi
+          git commit -m "chore: daily essay update $(date -u +%Y-%m-%d)"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # bot 的 push 不会触发 pages.yml，因此在同一 workflow 内直接部署
+      - name: Deploy GitHub Pages
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/deploy-pages@v4

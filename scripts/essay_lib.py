@@ -205,7 +205,7 @@ def load_public_data() -> dict:
         "updated_at": None,
         "articles": [],
         "materials": [],
-        "daily_pick": None,
+        "daily_picks": [],
     }
 
 
@@ -251,7 +251,7 @@ def call_ai(env: dict, prompt: str, retries: int = 2) -> str:
         "temperature": 0.1,
         "top_p": 1.0,
         "stream": False,
-        "max_tokens": int(env.get("AI_MAX_TOKENS", "2500")),
+        "max_tokens": int(env.get("AI_MAX_TOKENS", "8000")),
     }
     last_err = None
     for attempt in range(1, retries + 1):
@@ -265,7 +265,7 @@ def call_ai(env: dict, prompt: str, retries: int = 2) -> str:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=25) as resp:
+            with urllib.request.urlopen(req, timeout=90) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
             return body["choices"][0]["message"]["content"]
         except Exception as err:
@@ -279,23 +279,32 @@ def build_extract_prompt(article: dict) -> str:
     content = trim_footer(article.get("raw_content", ""))[:3500]
     source_label = SOURCE_LABEL.get(article["source"], article["source"])
     tags = "、".join(TOPIC_TAGS)
-    return f"""你是申论备考助手。请从以下官媒评论文章中提炼申论素材，输出严格 JSON（不要 markdown 代码块）。
+    return f"""你是专业公考申论素材提炼助手，精通国考、省考申论阅卷评分标准，擅长拆解人民日报、南方日报、学习时评、人民锐评等官方权威评论文章，精准提取适配申论答题、大作文写作的标准化高分素材，同步梳理文中提及的国家/地方相关政策，并详细拆解文章整体架构、段落逻辑与行文结构，严格按照指定JSON格式输出，**仅输出纯净JSON对象，无任何多余文字、注释、符号、代码块，首字符必须是{{**。
 
-字段说明：
-- topic_tags: 从词表中选 1-3 个
-- core_thesis: 核心论点，不超过 40 字
-- golden_sentences: 数组，每项 {{\"text\":\"金句\",\"usage\":\"开头|过渡|结尾\"}}
-- evidence_cases: 数组，每项 {{\"fact\":\"论据\",\"source_hint\":\"出处提示\"}}
-- policy_suggestions: 字符串数组，3-5 条对策，格式「动词+对象+目标」
-- applicable_types: 从「大作文」「策论文」「综合分析」中选 1-2 个
-- ai_summary: 100 字以内速读摘要
+## 固定主题词表（topic_tags仅限从中选取1-3个最贴合核心主旨的关键词，优先首选核心主题，不堆砌、不跑偏）
+{tags}
 
-主题词表：{tags}
-
+## 输入内容
 文章标题：{article.get('title', '')}
 文章来源：{source_label}
-正文：
-{content}
+文章正文：{content}
+
+## 强制提取规则（严格执行，决定素材质量）
+1. topic_tags: 从固定主题词表中选1-3个
+2. core_thesis: 提炼全文**唯一总论点**，高度凝练、站位拔高、贴合政策，字数≤40字，紧扣文章核心立意，适配申论一类文立意标准
+3. article_structure: 对象，详细分析全文行文框架，键名固定为 overview（整体框架概述）、opening（开篇功能）、body（主体层次与论证安排）、closing（结尾功能与升华方式）
+4. argument_points: 数组，2-3个**并列/递进/因果**逻辑的标准申论分论点，每项 {{\"point\":\"分论点\",\"logic\":\"因果|递进|并列\",\"method\":\"该分论点在文中的论证方式\"}}，逻辑清晰、句式工整、可直接套用
+5. golden_sentences: 数组，3-5句**适配考场写作**的高分金句，每项 {{\"text\":\"金句\",\"usage\":\"开头|过渡|结尾\"}}，拒绝普通大白话，语句权威凝练、对仗工整
+6. evidence_cases: 数组，每项 {{\"fact\":\"具体事实/数据/案例\",\"source_hint\":\"出处提示\"}}，内容详实不空洞，可直接用作论据
+7. related_policies: 数组，每项 {{\"name\":\"政策/规划/法规名称\",\"content\":\"核心内容\",\"direction\":\"实施方向\"}}；无则返回空数组
+8. policy_suggestions: 字符串数组，3-5条**申论标准化对策**，统一采用「动词+治理/发展对象+落地目标」句式，务实精准可落地
+9. applicable_types: 从【大作文、策论文、综合分析】中选1-2个
+10. ai_summary: 100字以内精简速读摘要，概括背景、核心观点、核心举措、关键政策，要点全覆盖
+11. paragraph_logic: 字符串，分析主体段落内部逻辑，说明如何运用案例、政策、道理论证，以及衔接过渡手法
+12. 整体要求：所有素材贴合申论考场使用，杜绝口语化、碎片化；结构分析通俗易懂，适配写作模仿学习
+
+## JSON输出字段（严格按此键名）
+topic_tags, core_thesis, article_structure, argument_points, golden_sentences, evidence_cases, related_policies, policy_suggestions, applicable_types, ai_summary, paragraph_logic
 """
 
 
@@ -304,7 +313,32 @@ def parse_ai_json(text: str) -> dict:
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # minimax 等模型可能在 JSON 前输出思考过程
+    if "</think>" in text:
+        text = text.split("</think>", 1)[-1].strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+    # 从已知字段名定位 JSON 起点，避免思考过程中的花括号干扰
+    for marker in ('{"topic_tags"', "{\n  \"topic_tags\"", "{\r\n  \"topic_tags\""):
+        idx = text.rfind(marker)
+        if idx >= 0:
+            try:
+                return json.loads(text[idx:])
+            except json.JSONDecodeError:
+                pass
+    # 括号配对：从每个 { 起尝试解析
+    for idx in reversed([m.start() for m in re.finditer(r"\{", text)]):
+        try:
+            return json.loads(text[idx:])
+        except json.JSONDecodeError:
+            continue
+    raise json.JSONDecodeError("未找到有效 JSON", text, 0)
 
 
 def fallback_extract(article: dict) -> dict:
@@ -315,7 +349,7 @@ def fallback_extract(article: dict) -> dict:
 
     golden = []
     for p in paras:
-        if len(golden) >= 2:
+        if len(golden) >= 3:
             break
         if "、" in p and len(p) <= 80:
             golden.append({"text": p, "usage": "过渡"})
@@ -347,70 +381,134 @@ def fallback_extract(article: dict) -> dict:
     if not tags:
         tags = ["高质量发展"]
 
+    arg_points = []
+    for p in paras[1:4]:
+        if p.startswith(("要", "应", "坚持", "推动", "聚焦")):
+            arg_points.append({"point": p[:50], "logic": "递进", "method": "政策引领+举措论证"})
+    if not arg_points and len(paras) > 1:
+        arg_points.append({"point": paras[1][:50], "logic": "因果", "method": "道理+事实支撑"})
+
+    related = []
+    for p in paras:
+        if len(related) >= 3:
+            break
+        if re.search(r"(规划|条例|法|方案|行动|部署|意见|纲要)", p):
+            related.append({"name": p[:30], "content": p[:60], "direction": "见原文"})
+
     return {
         "article_id": article["id"],
         "topic_tags": tags[:3],
         "core_thesis": thesis,
+        "article_structure": {
+            "overview": "开篇点题—主体分层论证—结尾升华号召",
+            "opening": paras[0][:80] if paras else "",
+            "body": "；".join(p[:40] for p in paras[1:3]) if len(paras) > 1 else "",
+            "closing": paras[-1][:80] if paras else "",
+        },
+        "argument_points": arg_points[:3],
         "golden_sentences": golden or [{"text": paras[0][:60], "usage": "开头"}] if paras else [],
         "evidence_cases": [{"fact": paras[1][:80], "source_hint": SOURCE_LABEL.get(article["source"], "")}] if len(paras) > 1 else [],
+        "related_policies": related,
         "policy_suggestions": policies or [paras[-1][:60]] if paras else [],
         "applicable_types": ["大作文", "策论文"],
         "ai_summary": content[:100],
+        "paragraph_logic": paras[1][:120] if len(paras) > 1 else "",
     }
 
 
 def extract_material(env: dict, article: dict) -> dict:
-    try:
-        raw = call_ai(env, build_extract_prompt(article))
-        parsed = parse_ai_json(raw)
-        return {
-            "article_id": article["id"],
-            "topic_tags": parsed.get("topic_tags", [])[:3],
-            "core_thesis": str(parsed.get("core_thesis", ""))[:120],
-            "golden_sentences": parsed.get("golden_sentences", [])[:3],
-            "evidence_cases": parsed.get("evidence_cases", [])[:2],
-            "policy_suggestions": parsed.get("policy_suggestions", [])[:5],
-            "applicable_types": parsed.get("applicable_types", [])[:2],
-            "ai_summary": str(parsed.get("ai_summary", ""))[:200],
-        }
-    except Exception as err:
-        log(f"AI 不可用，使用规则兜底: {err}")
-        return fallback_extract(article)
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            raw = call_ai(env, build_extract_prompt(article), retries=1)
+            parsed = parse_ai_json(raw)
+            related = parsed.get("related_policies", [])[:5]
+            if related and isinstance(related[0], str):
+                related = [{"name": item[:40], "content": item, "direction": ""} for item in related]
+            structure = parsed.get("article_structure", {})
+            if isinstance(structure, str):
+                structure = {"overview": structure[:300], "opening": "", "body": "", "closing": ""}
+            elif not isinstance(structure, dict):
+                structure = {}
+            return {
+                "article_id": article["id"],
+                "topic_tags": parsed.get("topic_tags", [])[:3],
+                "core_thesis": str(parsed.get("core_thesis", ""))[:120],
+                "article_structure": {
+                    "overview": str(structure.get("overview", ""))[:300],
+                    "opening": str(structure.get("opening", ""))[:200],
+                    "body": str(structure.get("body", ""))[:400],
+                    "closing": str(structure.get("closing", ""))[:200],
+                },
+                "argument_points": parsed.get("argument_points", [])[:3],
+                "golden_sentences": parsed.get("golden_sentences", [])[:5],
+                "evidence_cases": parsed.get("evidence_cases", [])[:4],
+                "related_policies": related,
+                "policy_suggestions": parsed.get("policy_suggestions", [])[:5],
+                "applicable_types": parsed.get("applicable_types", [])[:2],
+                "ai_summary": str(parsed.get("ai_summary", ""))[:200],
+                "paragraph_logic": str(parsed.get("paragraph_logic", ""))[:500],
+            }
+        except Exception as err:
+            last_err = err
+            log(f"AI 提炼失败 ({attempt}/3): {err}")
+            time.sleep(2 * attempt)
+    log(f"AI 不可用，使用规则兜底: {last_err}")
+    return fallback_extract(article)
 
 
-def pick_daily_material(data: dict, pick_day: str | None = None) -> dict | None:
-    pick_day = pick_day or date.today().isoformat()
-    materials = data.get("materials", [])
-    if not materials:
-        return None
+def _material_recency_score(material: dict, articles_by_id: dict, pick_day: str) -> tuple:
+    article = articles_by_id.get(material["article_id"], {})
+    pub = article.get("publish_date") or ""
+    recency = 0
+    if pub == pick_day:
+        recency = 100
+    elif pub:
+        try:
+            delta = (date.fromisoformat(pick_day) - date.fromisoformat(pub)).days
+            recency = max(0, 30 - delta)
+        except Exception:
+            recency = 0
+    return (recency, pub)
 
-    articles_by_id = {a["id"]: a for a in data.get("articles", [])}
 
-    def score(material: dict) -> tuple:
-        article = articles_by_id.get(material["article_id"], {})
-        pub = article.get("publish_date") or ""
-        recency = 0
-        if pub == pick_day:
-            recency = 100
-        elif pub:
-            try:
-                delta = (date.fromisoformat(pick_day) - date.fromisoformat(pub)).days
-                recency = max(0, 30 - delta)
-            except Exception:
-                recency = 0
-        source_bonus = 5 if article.get("source") == "nfdb" else 0
-        return (recency + source_bonus, pub)
-
-    ranked = sorted(materials, key=score, reverse=True)
-    material = ranked[0]
-    article = articles_by_id.get(material["article_id"])
+def _build_daily_pick(material: dict, article: dict, pick_day: str) -> dict:
     return {
         "pick_date": pick_day,
         "material_id": material["id"],
+        "source": article.get("source", ""),
         "source_label": SOURCE_LABEL.get(article.get("source", ""), ""),
         "material": material,
         "article": article,
     }
+
+
+def pick_daily_materials(data: dict, pick_day: str | None = None) -> list[dict]:
+    """每日推荐两篇：学习时评（南方）+ 人民锐评各一篇。"""
+    pick_day = pick_day or date.today().isoformat()
+    materials = data.get("materials", [])
+    if not materials:
+        return []
+
+    articles_by_id = {a["id"]: a for a in data.get("articles", [])}
+    picks = []
+    for source in ("nfdb", "rmrb"):
+        pool = [
+            m for m in materials
+            if articles_by_id.get(m["article_id"], {}).get("source") == source
+        ]
+        if not pool:
+            continue
+        material = max(pool, key=lambda m: _material_recency_score(m, articles_by_id, pick_day))
+        article = articles_by_id.get(material["article_id"])
+        if article:
+            picks.append(_build_daily_pick(material, article, pick_day))
+    return picks
+
+
+def pick_daily_material(data: dict, pick_day: str | None = None) -> dict | None:
+    picks = pick_daily_materials(data, pick_day)
+    return picks[0] if picks else None
 
 
 def supabase_request(env: dict, method: str, table: str, payload=None, params: str = "") -> list | dict | None:

@@ -16,7 +16,7 @@
 - 本周重点（最多 3 条）、技术学习清单、实习日志
 
 ### 考公备考中心
-- 刷题记录（APP + 纸质卷）+ 正确率趋势图
+- 刷题记录（APP + 纸质卷）+ 按题型分模块的正确率趋势图（行测/申论切换）
 - 看课进度跟踪与打卡
 - 错题本、每日总结、考试日历
 
@@ -174,31 +174,42 @@ time_planner/
 
 ## 申论积累流水线
 
-本地生成素材（建议每天早上运行一次）：
+### 手动运行
 
 ```powershell
-# 1. 复制配置
-copy .env.example .env
-# 编辑 .env，填入 AI_API_KEY
+copy .env.example .env   # 填入 AI_API_KEY
 
-# 2. 一键抓取 + AI 提炼
-.\scripts\run_essay_pipeline.ps1
-
-# AI 接口不稳定时，用规则兜底（仍能生成可用素材）
-.\scripts\run_essay_pipeline.ps1 -Fallback
-
-# 仅对已有文章重新提炼
-.\scripts\run_essay_pipeline.ps1 -ExtractOnly -Fallback
+.\scripts\run_essay_pipeline.ps1          # 爬取 + AI 提炼
+.\scripts\run_essay_pipeline.ps1 -Daily # 每日模式：每源抓1篇、各提炼1篇
 ```
 
-脚本会：
-1. 抓取人民锐评、学习时评最新文章
-2. 调用 AI 提炼申论素材（论点 / 金句 / 对策）；失败时自动规则兜底
-3. 选出今日推荐，写入 `data/essay_public.json`
+### 每天自动更新（二选一）
 
-前端自动读取该文件。部署前运行一次流水线，再 `git push` 即可更新线上素材。
+**方案 A：本机定时（适合本地看）**
 
-可用 Windows **任务计划程序** 每天 7:00 运行 `run_essay_pipeline.ps1`。
+```powershell
+.\scripts\setup_essay_scheduler.ps1
+# 每天 07:00 自动跑，日志在 logs/essay-daily-YYYYMMDD.log
+```
+
+**方案 B：GitHub Actions（适合线上站，电脑关机也能更新）**
+
+1. 仓库 Settings → Secrets → Actions，添加：
+   - `AI_API_URL`
+   - `AI_API_KEY`
+   - `AI_MODEL`
+2. push 代码后，`.github/workflows/essay-daily.yml` 每天北京时间 07:00 自动：
+   - 爬取人民锐评 + 学习时评
+   - AI 提炼并更新 `data/essay_public.json`
+   - 自动 commit + push → GitHub Pages 同步
+
+**本机定时且同步线上：**
+
+```powershell
+.\scripts\setup_essay_scheduler.ps1 -Push
+```
+
+每日模式会：每源抓取 1 篇新文章 → 南方/人民各提炼 1 篇 → 更新「今日推荐」两篇。
 
 ## 数据备份
 

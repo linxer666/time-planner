@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>双线计划台</title>
     <link rel="stylesheet" href="styles.css?v=20260606f" />
-    <link rel="stylesheet" href="planner.css?v=20260607b" />
+    <link rel="stylesheet" href="planner.css?v=20260609d" />
   </head>
   <body>
     <div class="app-shell" id="appShell">
@@ -365,9 +365,15 @@
               </div>
             </form>
             <div class="study-stats-row">
-              <div class="chart-wrap">
-                <p class="chart-eyebrow">正确率趋势</p>
-                <canvas id="accuracyChart" height="120"></canvas>
+              <div class="study-charts-col">
+                <div class="study-chart-toolbar">
+                  <p class="chart-eyebrow">正确率趋势 · 按题型</p>
+                  <select id="studyChartSubject" class="study-chart-subject" aria-label="趋势图科目">
+                    <option value="行测">行测</option>
+                    <option value="申论">申论</option>
+                  </select>
+                </div>
+                <div id="accuracyChartsGrid" class="accuracy-charts-grid"></div>
               </div>
               <ul class="record-list study-record-list" id="studyRecordsList"></ul>
             </div>
@@ -515,7 +521,7 @@
     <script src="modules/projects.js?v=20260605n"></script>
     <script src="modules/exam-taxonomy.js?v=20260606c"></script>
     <script src="modules/exam.js?v=20260608a"></script>
-    <script src="modules/essay.js?v=20260607c"></script>
+    <script src="modules/essay.js?v=20260609d"></script>
     <script src="modules/materials.js?v=20260607a"></script>
     <script src="app.js?v=20260608b"></script>
   </body>
