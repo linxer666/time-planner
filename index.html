@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>双线计划台</title>
-    <link rel="stylesheet" href="styles.css?v=20260606f" />
+    <link rel="stylesheet" href="styles.css?v=20260610b" />
     <link rel="stylesheet" href="planner.css?v=20260609d" />
   </head>
   <body>
@@ -25,17 +25,24 @@
           <button class="nav-tab" data-view="essay">申论积累</button>
           <button class="nav-tab" data-view="materials">资料库</button>
         </nav>
-        <section class="sidebar-cloud-panel" id="cloudPanel">
-          <div class="profile-row">
-            <div class="avatar-uploader" title="用户头像">
-              <span id="avatarInitial">我</span>
+        <details class="sidebar-cloud-panel" id="cloudPanel" open>
+          <summary class="cloud-panel-summary">
+            <div class="profile-row">
+              <div class="avatar-uploader" title="用户头像">
+                <span id="avatarInitial">我</span>
+              </div>
+              <div class="profile-copy">
+                <p class="eyebrow">账号同步</p>
+                <h2 id="cloudTitle">登录后同步数据</h2>
+                <p id="cloudStatus">未登录时仍可本地使用。</p>
+              </div>
             </div>
-            <div class="profile-copy">
-              <p class="eyebrow">账号同步</p>
-              <h2 id="cloudTitle">登录后同步数据</h2>
-              <p id="cloudStatus">未登录时仍可本地使用。</p>
+            <div class="cloud-panel-summary-actions">
+              <span class="cloud-panel-hint" id="cloudPanelHint">登录 / 注册</span>
+              <button class="ghost-btn sm-btn cloud-summary-btn" type="button" id="cloudSummaryBtn">登录</button>
+              <span class="cloud-panel-chevron" aria-hidden="true">▾</span>
             </div>
-          </div>
+          </summary>
           <form class="cloud-form" id="authForm">
             <input id="authEmail" type="email" placeholder="邮箱" autocomplete="email" />
             <input id="authPassword" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password" />
@@ -49,7 +56,7 @@
             <input class="hidden" id="importDataFile" type="file" accept="application/json" />
             <button class="ghost-btn danger-btn" type="button" id="signOutBtn">退出登录</button>
           </div>
-        </section>
+        </details>
         <details class="storage-card safety-card">
           <summary>
             <span id="storageMode">本地存储</span>
@@ -523,6 +530,6 @@
     <script src="modules/exam.js?v=20260610a"></script>
     <script src="modules/essay.js?v=20260609d"></script>
     <script src="modules/materials.js?v=20260607a"></script>
-    <script src="app.js?v=20260608b"></script>
+    <script src="app.js?v=20260610b"></script>
   </body>
 </html>

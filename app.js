@@ -107,6 +107,37 @@
     });
   }
 
+  function syncCloudPanelOpen(loggedIn) {
+    const panel = document.getElementById("cloudPanel");
+    if (!panel || panel.tagName !== "DETAILS") return;
+    const mobile = window.matchMedia("(max-width: 920px)").matches;
+    panel.open = mobile ? !loggedIn : true;
+    updateCloudPanelHint(loggedIn);
+  }
+
+  function updateCloudPanelHint(loggedIn) {
+    const panel = document.getElementById("cloudPanel");
+    const hint = document.getElementById("cloudPanelHint");
+    const summaryBtn = document.getElementById("cloudSummaryBtn");
+    if (!panel || !hint || !summaryBtn) return;
+
+    const mobile = window.matchMedia("(max-width: 920px)").matches;
+    if (!mobile || panel.open) {
+      hint.textContent = "";
+      summaryBtn.classList.add("hidden");
+      return;
+    }
+
+    summaryBtn.classList.remove("hidden");
+    if (loggedIn) {
+      hint.textContent = "账号管理";
+      summaryBtn.textContent = "管理";
+    } else {
+      hint.textContent = "登录 / 注册";
+      summaryBtn.textContent = "登录";
+    }
+  }
+
   function updateCloudUI(message) {
     const loggedIn = !!store.user;
     document.getElementById("cloudTitle").textContent = loggedIn ? "已登录云端" : "登录后同步数据";
@@ -116,6 +147,21 @@
     document.getElementById("storageMode").textContent = loggedIn ? "云端 + 本地" : "本地存储";
     if (loggedIn && store.user?.email) {
       document.getElementById("avatarInitial").textContent = store.user.email[0].toUpperCase();
+    } else {
+      document.getElementById("avatarInitial").textContent = "我";
+    }
+    syncCloudPanelOpen(loggedIn);
+  }
+
+  function openCloudPanel(focusSelector) {
+    const panel = document.getElementById("cloudPanel");
+    if (!panel) return;
+    panel.open = true;
+    updateCloudPanelHint(!!store.user);
+    if (focusSelector) {
+      window.requestAnimationFrame(() => {
+        document.querySelector(focusSelector)?.focus();
+      });
     }
   }
 
@@ -336,7 +382,22 @@
       }
     );
 
+    document.getElementById("cloudPanel")?.addEventListener("toggle", () => {
+      updateCloudPanelHint(!!store.user);
+    });
+
+    document.getElementById("cloudSummaryBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const loggedIn = !!store.user;
+      openCloudPanel(loggedIn ? null : "#authEmail");
+    });
+
     restoreSession();
+
+    window.matchMedia("(max-width: 920px)").addEventListener("change", () => {
+      syncCloudPanelOpen(!!store.user);
+    });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible" || !store.cloudReady) return;

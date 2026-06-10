@@ -4,6 +4,16 @@ $Port = 5173
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 
+$PortInUse = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+if ($PortInUse) {
+  Write-Host ""
+  Write-Host "Port $Port is already in use."
+  Write-Host "Open http://localhost:$Port directly, or close the other server window first."
+  Write-Host ""
+  Read-Host "Press Enter to exit"
+  exit 1
+}
+
 $Candidates = @(
   @{ Command = "python"; Args = @() },
   @{ Command = "py"; Args = @("-3") },
@@ -16,8 +26,8 @@ foreach ($Candidate in $Candidates) {
     & $Candidate.Command @VersionArgs *> $null
 
     Write-Host ""
-    Write-Host "网站已启动： http://localhost:$Port"
-    Write-Host "请保持这个窗口打开，关闭窗口网站就会停止。"
+    Write-Host "Server started: http://localhost:$Port"
+    Write-Host "Keep this window open. Closing it stops the server."
     Write-Host ""
 
     $ServerArgs = @($Candidate.Args) + @("-m", "http.server", "$Port", "--bind", "127.0.0.1")
@@ -28,7 +38,6 @@ foreach ($Candidate in $Candidates) {
 }
 
 Write-Host ""
-Write-Host "没有找到 Python，暂时无法一键启动本地服务器。"
-Write-Host "请先安装 Python 3，或者直接双击 index.html 试用基础页面。"
+Write-Host "Python not found. Install Python 3, or open index.html directly."
 Write-Host ""
-Read-Host "按回车退出"
+Read-Host "Press Enter to exit"
