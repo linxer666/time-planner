@@ -104,31 +104,48 @@
     drawChart(store);
   }
 
-  function drawChart(store) {
-    const canvas = $("#accuracyChart");
-    if (!canvas) return;
+  function getRecordCategory(record) {
+    if (record.question_category) return record.question_category;
+    if (record.question_type && record.question_type.includes(" · ")) {
+      return record.question_type.split(" · ")[0];
+    }
+    if (record.question_type) return record.question_type;
+    return "未分类";
+  }
+
+  function getCategoriesWithData(records, subject) {
+    const tax = window.PlannerExamTaxonomy;
+    const ordered = tax?.getCategories(subject) || [];
+    const withData = new Set(records.filter((r) => r.subject === subject).map(getRecordCategory));
+    const result = ordered.filter((c) => withData.has(c));
+    withData.forEach((c) => {
+      if (!result.includes(c)) result.push(c);
+    });
+    return result;
+  }
+
+  function drawLineChart(canvas, records, { lineColor = "#f2a51f", dotColor = "#d77f0d", emptyText = "" } = {}) {
     const ctx = canvas.getContext("2d");
-    const records = store.list("study_records")
-      .filter((r) => r.accuracy != null)
-      .sort((a, b) => new Date(a.record_date) - new Date(b.record_date))
-      .slice(-14);
-    const w = canvas.width = canvas.parentElement.clientWidth - 24;
-    const h = canvas.height = 120;
+    const w = canvas.width = canvas.parentElement.clientWidth - 8;
+    const h = canvas.height = 100;
     ctx.clearRect(0, 0, w, h);
     if (!records.length) {
-      ctx.fillStyle = "#7a684b";
-      ctx.font = "13px sans-serif";
-      ctx.fillText("刷题后记录正确率，这里会显示趋势", 12, 60);
+      if (emptyText) {
+        ctx.fillStyle = "#7a684b";
+        ctx.font = "12px sans-serif";
+        ctx.fillText(emptyText, 8, h / 2);
+      }
       return;
     }
-    const pad = 24;
+    const pad = 18;
     const maxY = 100;
     ctx.strokeStyle = "#eddca6";
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(pad, h - pad);
     ctx.lineTo(w - pad, h - pad);
     ctx.stroke();
-    ctx.strokeStyle = "#f2a51f";
+    ctx.strokeStyle = lineColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     records.forEach((r, i) => {
@@ -138,13 +155,51 @@
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
-    ctx.fillStyle = "#d77f0d";
+    ctx.fillStyle = dotColor;
     records.forEach((r, i) => {
       const x = pad + (i / Math.max(records.length - 1, 1)) * (w - pad * 2);
       const y = h - pad - (r.accuracy / maxY) * (h - pad * 2);
       ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
       ctx.fill();
+    });
+    const latest = records[records.length - 1];
+    ctx.fillStyle = "#7a684b";
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(`${latest.accuracy}%`, w - pad, pad);
+    ctx.textAlign = "left";
+  }
+
+  function drawChart(store) {
+    const grid = $("#accuracyChartsGrid");
+    if (!grid) return;
+    const subject = $("#studyChartSubject")?.value || "行测";
+    const records = store.list("study_records").filter((r) => r.accuracy != null && r.subject === subject);
+    const categories = getCategoriesWithData(records, subject);
+
+    if (!categories.length) {
+      grid.innerHTML = `<p class="muted chart-empty">记录 ${escapeHtml(subject)} 各题型的正确率后，这里会按模块显示趋势</p>`;
+      return;
+    }
+
+    grid.innerHTML = categories.map((cat) => `
+      <div class="chart-wrap chart-wrap-sm">
+        <p class="chart-eyebrow">${escapeHtml(cat)}</p>
+        <canvas data-chart-category="${escapeHtml(cat)}" height="100"></canvas>
+      </div>
+    `).join("");
+
+    // 等布局完成后再画，避免 canvas 宽度为 0
+    requestAnimationFrame(() => {
+      grid.querySelectorAll("canvas[data-chart-category]").forEach((canvas) => {
+        const cat = canvas.dataset.chartCategory;
+        const catRecords = records
+          .filter((r) => getRecordCategory(r) === cat)
+          .sort((a, b) => new Date(a.record_date) - new Date(b.record_date))
+          .slice(-14);
+        drawLineChart(canvas, catRecords);
+      });
     });
   }
 
@@ -286,7 +341,10 @@
   window.PlannerExam = {
     init(store) {
       document.querySelectorAll(".exam-tab").forEach((btn) => {
-        btn.addEventListener("click", () => switchTab(btn.dataset.examTab));
+        btn.addEventListener("click", () => {
+          switchTab(btn.dataset.examTab);
+          if (btn.dataset.examTab === "study") drawChart(store);
+        });
       });
 
       renderStudyQuestionFields($("#studySubject")?.value || "行测");
@@ -301,6 +359,8 @@
       $("#studyIsPaper")?.addEventListener("change", (e) => {
         document.querySelectorAll(".paper-fields").forEach((el) => el.classList.toggle("hidden", !e.target.checked));
       });
+
+      $("#studyChartSubject")?.addEventListener("change", () => drawChart(store));
 
       $("#studyRecordForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();
