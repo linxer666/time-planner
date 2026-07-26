@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-25T00:09:08.781502Z",
+  "updated_at": "2026-07-26T00:05:12.008345Z",
   "articles": [
     {
       "id": "087b4c34-4686-48a6-97ca-4a3d6056ab22",
@@ -1326,7 +1326,7 @@
   ],
   "daily_picks": [
     {
-      "pick_date": "2026-07-25",
+      "pick_date": "2026-07-26",
       "material_id": "18e9e8ae-0d31-4c6c-af53-014e16dbe0a7",
       "source": "nfdb",
       "source_label": "学习时评",
@@ -1410,7 +1410,7 @@
       }
     },
     {
-      "pick_date": "2026-07-25",
+      "pick_date": "2026-07-26",
       "material_id": "03a5ce5a-5255-4d0e-ad46-3318857aad0a",
       "source": "rmrb",
       "source_label": "人民锐评",
