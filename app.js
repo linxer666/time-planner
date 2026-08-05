@@ -37,11 +37,12 @@
 
   function initSupabase() {
     const config = window.PM_SUPABASE || {};
-    if (!config.url || !config.anonKey || !window.supabase?.createClient) {
+    const baseUrl = (config.proxyUrl || config.url || "").replace(/\/$/, "");
+    if (!baseUrl || !config.anonKey || !window.supabase?.createClient) {
       updateCloudUI("未配置 Supabase，当前使用本地存储。");
       return null;
     }
-    return window.supabase.createClient(config.url, config.anonKey, {
+    return window.supabase.createClient(baseUrl, config.anonKey, {
       auth: { persistSession: true, autoRefreshToken: true }
     });
   }

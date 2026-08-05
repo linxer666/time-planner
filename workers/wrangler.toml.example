@@ -1,0 +1,15 @@
+# 复制为 wrangler.toml 后部署：npx wrangler deploy
+# 或运行 scripts/deploy-supabase-proxy.ps1
+
+name = "time-planner-supabase"
+main = "supabase-proxy.js"
+compatibility_date = "2024-01-01"
+
+# 你的 Supabase Project URL（Settings → API）
+[vars]
+SUPABASE_URL = "https://hxgdjzpjcmzgsojhhoio.supabase.co"
+
+# 可选：绑定自定义域名（在 Cloudflare Dashboard 里配置路由）
+# [[routes]]
+# pattern = "db.yourdomain.com/*"
+# zone_name = "yourdomain.com"

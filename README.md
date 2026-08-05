@@ -25,7 +25,7 @@
 
 ### 申论积累（独立模块）
 - 侧边栏 **申论积累** 独立入口
-- 自动抓取 [人民锐评](http://opinion.people.com.cn/GB/436867/index.html) 与 [学习时评](https://news.southcn.com/node_85bedd3e4b)
+- 自动抓取 [人民锐评](http://opinion.people.com.cn/GB/436867/index.html)、[学习时评](https://news.southcn.com/node_85bedd3e4b) 与 [人民日报第05版评论](https://paper.people.com.cn/rmrb/pc/layout/202608/05/node_05.html)（当日评论版，跳过「欢迎赐稿」「本版责编」等非文章条目）
 - AI 提炼论点、金句、论据、对策框架
 - 顶部展示「今日申论积累」，下方素材库可搜索、按主题/来源筛选、收藏
 
@@ -128,6 +128,28 @@ copy supabase-config.example.js supabase-config.js
 
 ### 常见问题
 
+**Q: 线上登录报 Failed to fetch？**  
+不是你的密码错了，而是当前网络 **解析不了 `*.supabase.co`**（运营商/地区 DNS 封锁，和 Supabase 上别的项目被滥用有关，可能突然发生）。  
+GitHub Pages 能打开，但登录必须连 Supabase API，被拦就会 Failed to fetch。
+
+**临时解决（自己用）：** 开 VPN，或 DNS 改为 `1.1.1.1` / `8.8.8.8`（部分网络仍无效）。
+
+**长期解决（推荐，免费）：** 用 Cloudflare Worker 做代理，让浏览器连 `workers.dev` 而不是 `supabase.co`：
+
+```powershell
+# 1. 注册 cloudflare.com，安装 Node.js
+cd d:\Project\Python\time_planner
+copy workers\wrangler.toml.example workers\wrangler.toml
+# 确认 wrangler.toml 里 SUPABASE_URL 正确
+.\scripts\deploy-supabase-proxy.ps1
+# 首次会提示 npx wrangler login（浏览器授权）
+
+# 2. 把部署输出的 workers.dev 地址填进 supabase-config.js：
+#    proxyUrl: "https://time-planner-supabase.你的CF用户名.workers.dev",
+
+# 3. push 到 GitHub，等 Pages 更新后 Ctrl+F5 刷新再登录
+```
+
 **Q: 登录后数据没了？**  
 先点「导出备份」。若云端是空的、本地有数据，重新登录会自动上传；也可手动点「同步云端」。
 
@@ -169,6 +191,9 @@ time_planner/
 │   ├── projects.js
 │   ├── exam.js
 │   └── materials.js
+├── workers/
+│   ├── supabase-proxy.js       # Cloudflare Worker（国内网络代理 Supabase）
+│   └── wrangler.toml.example
 └── start-server.ps1
 ```
 
@@ -199,7 +224,7 @@ copy .env.example .env   # 填入 AI_API_KEY
    - `AI_API_KEY`
    - `AI_MODEL`
 2. push 代码后，`.github/workflows/essay-daily.yml` 每天北京时间 07:00 自动：
-   - 爬取人民锐评 + 学习时评
+   - 爬取人民锐评 + 学习时评 + 人民日报第05版
    - AI 提炼并更新 `data/essay_public.json`
    - 自动 commit + push → GitHub Pages 同步
 

@@ -6,6 +6,7 @@ import time
 
 from essay_lib import (
     crawl_people,
+    crawl_rmrb_paper,
     crawl_southcn,
     extract_material,
     fallback_extract,
@@ -23,9 +24,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def crawl_new_articles(data: dict, limit_per_source: int = 3) -> int:
-    candidates = crawl_southcn(2) + crawl_people(2)
+    candidates = crawl_southcn(2) + crawl_people(2) + crawl_rmrb_paper()
     added = 0
-    per_source = {"rmrb": 0, "nfdb": 0}
+    per_source = {"rmrb": 0, "nfdb": 0, "rmrb_paper": 0}
     for item in candidates:
         src = item["source"]
         if per_source[src] >= limit_per_source:
@@ -64,7 +65,7 @@ def extract_pending(
         pending.append(article)
     pending.sort(key=lambda a: a.get("publish_date") or "", reverse=True)
 
-    per_source = {"rmrb": 0, "nfdb": 0}
+    per_source = {"rmrb": 0, "nfdb": 0, "rmrb_paper": 0}
     max_per_source = 1 if balanced and limit >= 2 else limit
     done = 0
     rounds = 0

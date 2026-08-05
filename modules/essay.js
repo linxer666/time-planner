@@ -1,5 +1,5 @@
 (function () {
-  const SOURCE_LABEL = { rmrb: "人民锐评", nfdb: "学习时评" };
+  const SOURCE_LABEL = { rmrb: "人民锐评", nfdb: "学习时评", rmrb_paper: "人民日报" };
   const USAGE_LABEL = { "开头": "开头", "过渡": "过渡", "结尾": "结尾" };
   let cache = null;
   let cacheAt = 0;
@@ -207,7 +207,7 @@
       card.innerHTML = `
         <div class="section-head compact">
           <div>
-            <p class="eyebrow">人民锐评 · 学习时评</p>
+            <p class="eyebrow">人民锐评 · 学习时评 · 人民日报</p>
             <h2>今日申论积累</h2>
           </div>
         </div>

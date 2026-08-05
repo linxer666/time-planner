@@ -7,6 +7,7 @@ import re
 import time
 import uuid
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date, datetime
 from pathlib import Path
@@ -21,7 +22,13 @@ TOPIC_TAGS = [
     "营商环境", "数字经济", "共同富裕", "国家安全", "法治建设",
 ]
 
-SOURCE_LABEL = {"rmrb": "人民锐评", "nfdb": "学习时评"}
+SOURCE_LABEL = {
+    "rmrb": "人民锐评",
+    "nfdb": "学习时评",
+    "rmrb_paper": "人民日报",
+}
+RMRB_PAPER_LAYOUT = "https://paper.people.com.cn/rmrb/pc/layout/{ym}/{day}/node_05.html"
+RMRB_PAPER_SKIP = ("欢迎赐稿", "本版责编", "图片报道", "PDF下载", "版：")
 USER_AGENT = "Mozilla/5.0 (compatible; EssayPlanner/1.0; +personal-study)"
 
 
@@ -66,6 +73,24 @@ def clean_text(html: str) -> str:
     return text.strip()
 
 
+def trim_rmrb_paper_footer(text: str) -> str:
+    for marker in (
+        "/enpproperty",
+        "人民日报社概况",
+        "人民网版权",
+    ):
+        idx = text.find(marker)
+        if idx > 80:
+            text = text[:idx]
+    # 电子版页脚：2026-08-05 00:00:00:0作者名 ...
+    text = re.sub(
+        r"\s*20\d{2}-\d{2}-\d{2}\s+00:00:00:0[\s\S]*$",
+        "",
+        text,
+    )
+    return text.strip()
+
+
 def trim_footer(text: str) -> str:
     for marker in ("人民日报社概况", "人民网版权", "Copyright", "互联网新闻信息服务许可证"):
         idx = text.find(marker)
@@ -81,6 +106,11 @@ def extract_article_content(html: str, source: str) -> str:
             r'class="article-content"[^>]*>([\s\S]*?)</div>',
             r'class="content"[^>]*>([\s\S]*?)</div>',
         ]
+    elif source == "rmrb_paper":
+        patterns = [
+            r'id="ozoom"[^>]*>([\s\S]*?)</div>',
+            r'class="article-content"[^>]*>([\s\S]*?)</div>',
+        ]
     else:
         patterns = [
             r'id="p_content"[^>]*>([\s\S]*?)</div>',
@@ -91,11 +121,16 @@ def extract_article_content(html: str, source: str) -> str:
         m = re.search(pat, html, flags=re.I)
         if m:
             text = clean_text(m.group(1))
+            if source == "rmrb_paper":
+                text = trim_rmrb_paper_footer(text)
             if len(text) >= 120:
                 return text
     paras = re.findall(r"<p[^>]*>([\s\S]*?)</p>", html, flags=re.I)
     chunks = [clean_text(p) for p in paras if len(clean_text(p)) >= 20]
-    return trim_footer("\n".join(chunks))
+    text = trim_footer("\n".join(chunks))
+    if source == "rmrb_paper":
+        text = trim_rmrb_paper_footer(text)
+    return text
 
 
 def parse_date(text: str) -> str | None:
@@ -139,6 +174,51 @@ def crawl_southcn(max_pages: int = 2) -> list[dict]:
     return items
 
 
+def rmrb_paper_layout_url(day: date | None = None) -> str:
+    day = day or date.today()
+    ym = f"{day.year}{day.month:02d}"
+    return RMRB_PAPER_LAYOUT.format(ym=ym, day=f"{day.day:02d}")
+
+
+def _should_skip_rmrb_paper_title(title: str) -> bool:
+    return any(key in title for key in RMRB_PAPER_SKIP)
+
+
+def crawl_rmrb_paper(day: date | None = None) -> list[dict]:
+    """抓取人民日报电子版第 05 版（评论）当日文章列表。"""
+    day = day or date.today()
+    layout_url = rmrb_paper_layout_url(day)
+    try:
+        html = fetch_html(layout_url)
+    except Exception as err:
+        log(f"人民日报版面不可用 {layout_url}: {err}")
+        return []
+
+    pub = day.isoformat()
+    items = []
+    seen = set()
+    for m in re.finditer(
+        r'href="(\.\./\.\./\.\./content/[^"]+\.html)"[^>]*>([\s\S]*?)</a>',
+        html,
+        flags=re.I,
+    ):
+        href, inner = m.group(1), m.group(2)
+        title = re.sub(r"\s+", " ", clean_text(inner))
+        if not title or _should_skip_rmrb_paper_title(title):
+            continue
+        link = urllib.parse.urljoin(layout_url, href)
+        if link in seen:
+            continue
+        seen.add(link)
+        items.append({
+            "source": "rmrb_paper",
+            "title": title,
+            "url": link,
+            "publish_date": pub,
+        })
+    return items
+
+
 def crawl_people(max_pages: int = 2) -> list[dict]:
     items = []
     seen = set()
@@ -177,7 +257,7 @@ def crawl_people(max_pages: int = 2) -> list[dict]:
 
 
 def fetch_article_body(item: dict) -> dict:
-    enc = "gbk" if item["source"] == "rmrb" else "utf-8"
+    enc = "gbk" if item["source"] == "rmrb" else "utf-8"  # rmrb_paper 为 utf-8
     html = fetch_html(item["url"], enc)
     title_m = re.search(r"<title>([^<]+)</title>", html, flags=re.I)
     title = item.get("title") or ""
@@ -253,6 +333,8 @@ def call_ai(env: dict, prompt: str, retries: int = 2) -> str:
         "stream": False,
         "max_tokens": int(env.get("AI_MAX_TOKENS", "8000")),
     }
+    # 内网/直连 AI 网关时禁用系统代理，避免被错误转发导致 502
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     last_err = None
     for attempt in range(1, retries + 1):
         try:
@@ -262,10 +344,12 @@ def call_ai(env: dict, prompt: str, retries: int = 2) -> str:
                 headers={
                     "Authorization": f"Bearer {env['AI_API_KEY']}",
                     "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "Connection": "close",
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with opener.open(req, timeout=90) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
             return body["choices"][0]["message"]["content"]
         except Exception as err:
@@ -308,34 +392,34 @@ topic_tags, core_thesis, article_structure, argument_points, golden_sentences, e
 """
 
 
+def _clean_json_candidate(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+    text = re.sub(r"\s*```\s*$", "", text)
+    return text.strip()
+
+
 def parse_ai_json(text: str) -> dict:
     text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
+    if "</think>" in text:
+        text = text.split("</think>", 1)[-1].strip()
+    text = _clean_json_candidate(text)
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # minimax 等模型可能在 JSON 前输出思考过程
-    if "</think>" in text:
-        text = text.split("</think>", 1)[-1].strip()
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-    # 从已知字段名定位 JSON 起点，避免思考过程中的花括号干扰
+    # minimax 等模型可能在 JSON 前输出思考过程（含未闭合的 thinking 标签）
     for marker in ('{"topic_tags"', "{\n  \"topic_tags\"", "{\r\n  \"topic_tags\""):
         idx = text.rfind(marker)
         if idx >= 0:
             try:
-                return json.loads(text[idx:])
+                return json.loads(_clean_json_candidate(text[idx:]))
             except json.JSONDecodeError:
                 pass
     # 括号配对：从每个 { 起尝试解析
     for idx in reversed([m.start() for m in re.finditer(r"\{", text)]):
         try:
-            return json.loads(text[idx:])
+            return json.loads(_clean_json_candidate(text[idx:]))
         except json.JSONDecodeError:
             continue
     raise json.JSONDecodeError("未找到有效 JSON", text, 0)
